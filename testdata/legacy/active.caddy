@@ -1,0 +1,1637 @@
+
+
+
+
+{
+  
+
+
+
+
+  servers {
+    
+
+
+    trusted_proxies static 10.0.0.0/8
+
+
+
+
+  }
+
+
+
+
+
+  metrics {
+    
+
+
+    per_host
+
+
+
+
+  }
+
+
+
+  admin :2019
+
+
+
+
+}
+
+
+(protected) {
+  
+
+
+
+
+  forward_auth auth.home:9091 {
+    
+
+
+    uri /api/authz/forward-auth
+
+
+    copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+
+
+
+
+  }
+
+
+
+
+
+}
+
+(whitelist_local) {
+  
+
+
+  @denied not client_ip 10.0.0.0/8 168.119.68.214/32 2001:470:1f13:b58::/64 2001:861:5286:d5e0::/60
+
+
+  error @denied "Unauthorized" 403
+
+
+
+
+}
+
+
+
+
+
+
+authelia.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy auth.home:9091 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/authelia.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+claptrapbot.claptrapbot.com {
+  tls /etc/ssl/acme/-.claptrapbot.com/fullchain.pem /etc/ssl/acme/-.claptrapbot.com/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/claptrapbot.claptrapbot.com.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+claptrapbot.com {
+  tls /etc/ssl/acme/-.claptrapbot.com/fullchain.pem /etc/ssl/acme/-.claptrapbot.com/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/claptrapbot.com.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+next.claptrapbot.com {
+  tls /etc/ssl/acme/-.claptrapbot.com/fullchain.pem /etc/ssl/acme/-.claptrapbot.com/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/next.claptrapbot.com.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+frigate.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy frigate.home:8971 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+    
+
+
+
+
+    transport http {
+      
+
+
+      tls
+
+
+      tls_insecure_skip_verify
+
+
+
+
+    }
+
+
+
+
+
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/frigate.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+git.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy gitea.home:3000 {
+
+    health_uri /api/healthz
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/git.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+grafana-webdav.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/grafana-webdav.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+
+
+
+
+  @write_nonlocal {
+    
+
+
+    method POST PUT DELETE
+
+
+    not client_ip 10.0.0.0/8 168.119.68.214/32 2001:470:1f13:b58::/64 2001:861:5286:d5e0::/60
+
+
+
+
+  }
+
+
+
+  error @write_nonlocal "Unauthorized" 403
+
+
+
+
+  
+}
+
+
+grafana.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy grafana.home:3000 {
+
+    health_uri /api/health
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/grafana.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+hass.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy hassio.home:8123 {
+
+    health_uri /manifest.json
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/hass.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+immich.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy immich.home:2283 {
+
+    health_uri /api/server/ping
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/immich.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+jellyfin.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy jellyfin.home:8096 {
+
+    health_uri /health
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/jellyfin.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+
+
+
+
+  handle /metrics {
+    
+
+
+    @denied not client_ip 10.0.0.0/8
+
+
+    error @denied "Unauthorized" 403
+
+
+
+
+  }
+
+
+
+
+
+  
+}
+
+
+ldap.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy auth.home:17170 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/ldap.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+octoprint.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy 10.31.0.40:80 {
+
+    health_uri /login
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+  import protected
+
+
+  log {
+    output file /var/log/caddy/octoprint.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+onlyoffice.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy opencloud.home:8080 {
+
+    health_uri /hosting/discovery
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/onlyoffice.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+opencloud.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy opencloud.home:9201 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/opencloud.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+opnsense.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy 10.23.0.1:780 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/opnsense.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+pelican.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:8080 {
+
+    health_uri /up
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/pelican.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+phpmyadmin.box.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy database.home:80 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/phpmyadmin.box.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+proxmox.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy predator.home:8006 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+    
+
+
+
+
+    transport http {
+      
+
+
+      tls
+
+
+      tls_insecure_skip_verify
+
+
+
+
+    }
+
+
+
+
+
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/proxmox.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+renovate-manager.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy runner.home:8080 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/renovate-manager.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+speedtest.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:3000 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+    
+
+
+    request_buffers 35MiB
+
+
+    response_buffers 35MiB
+
+
+    flush_interval -1
+
+
+
+
+
+  }
+
+
+  log {
+    output file /var/log/caddy/speedtest.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+traefik.box.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+
+    health_uri /ping
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+  import protected
+
+
+  log {
+    output file /var/log/caddy/traefik.box.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+babybuddy.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/babybuddy.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+bazarr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/bazarr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+bin.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/bin.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+book.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/book.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+guacamole.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/guacamole.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+home.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/home.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+it-tools.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  log {
+    output file /var/log/caddy/it-tools.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+jellyseerr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/jellyseerr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+kavita.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/kavita.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+lk.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/lk.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+mc-update.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/mc-update.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+memos.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/memos.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+n-toolbox.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  log {
+    output file /var/log/caddy/n-toolbox.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+pdf.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  log {
+    output file /var/log/caddy/pdf.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+pgadmin.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/pgadmin.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+prowlarr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/prowlarr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+qbittorrent.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/qbittorrent.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+radarr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/radarr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+recipes.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/recipes.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+sonarr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+  import protected
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/sonarr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+tracearr.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/tracearr.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+warden.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy docker.home:80 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/warden.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+unifi.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy 10.24.0.3:11443 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+    
+
+
+
+
+    transport http {
+      
+
+
+      tls
+
+
+      tls_insecure_skip_verify
+
+
+
+
+    }
+
+
+
+    header_up Host {hostport}
+
+
+
+
+
+  }
+
+
+  log {
+    output file /var/log/caddy/unifi.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+victoriametrics.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy victoriametrics.home:8428 {
+
+    health_uri /
+    health_follow_redirects
+    health_fails 3
+    health_timeout 20s
+    
+
+  }
+
+
+  import whitelist_local
+
+  log {
+    output file /var/log/caddy/victoriametrics.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+vmagent.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy victoriametrics.home:8429 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/vmagent.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+
+
+
+
+  basic_auth {
+    
+
+
+    vm $2a$14$Mvv.bxELBYpxlqWrqSeq6O8bM3lbi6WCE0q.NrMrgAUbYp5ZZtQtC
+
+
+    grafana $2a$14$Mvv.bxELBYpxlqWrqSeq6O8bM3lbi6WCE0q.NrMrgAUbYp5ZZtQtC
+
+
+    opnsense $2a$14$Mvv.bxELBYpxlqWrqSeq6O8bM3lbi6WCE0q.NrMrgAUbYp5ZZtQtC
+
+
+    admin $2a$14$Mvv.bxELBYpxlqWrqSeq6O8bM3lbi6WCE0q.NrMrgAUbYp5ZZtQtC
+
+
+
+
+  }
+
+
+
+
+
+  
+}
+
+
+wings.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy wings.home:8080 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/wings.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+wopiserver.sebclem.fr {
+  tls /etc/ssl/acme/-.sebclem.fr/fullchain.pem /etc/ssl/acme/-.sebclem.fr/key.pem 
+  reverse_proxy opencloud.home:9301 {
+    
+
+  }
+
+
+  log {
+    output file /var/log/caddy/wopiserver.sebclem.fr.log {
+      mode 640
+      roll_size 50mb
+      roll_local_time
+    }
+  }
+  handle_errors {
+    root /srv
+    rewrite * /{err.status_code}.html
+    file_server
+  }
+  
+  
+}
+
+
+
+
