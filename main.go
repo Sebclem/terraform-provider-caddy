@@ -8,9 +8,10 @@ import (
 )
 
 var version = "0.1.0"
+var address = "local.sebclem.fr/sebclem/caddy"
 
 func main() {
-	if err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{Address: "local.sebclem.fr/sebclem/caddy"}); err != nil {
+	if err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{Address: address}); err != nil {
 		log.Fatal(err)
 	}
 }

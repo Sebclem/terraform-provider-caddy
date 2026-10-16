@@ -91,3 +91,7 @@ Parents must have IDs. Import does not adopt children automatically. Only the cu
 Optional settings are observed at import and become managed when configured. The computed `configuration_revision` records field ownership without exposing settings or secrets. The first apply after importing a route with configured optional settings can show a state-only metadata update; it performs no Caddy write if live values already match. Subsequent plans are empty. `order_satisfied` exposes whether a configured sibling order needs repair.
 
 See [testing](docs/testing.md), the [design](spec/design.md) and [implementation notes](docs/implementation-notes.md).
+
+## Releases
+
+Release archives and signed checksums are built from version tags in the planned GitHub mirror. See the [release setup and OpenTofu Registry steps](docs/releasing.md). The one-time registry submission and signing-key registration are manual; pushing a tag only creates the signed GitHub release.

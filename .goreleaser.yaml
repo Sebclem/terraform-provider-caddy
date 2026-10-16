@@ -1,0 +1,72 @@
+version: 2
+project_name: terraform-provider-caddy
+
+builds:
+  - id: provider
+    main: .
+    binary: terraform-provider-caddy_v{{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.address=registry.opentofu.org/sebclem/caddy
+    goos:
+      - darwin
+      - freebsd
+      - linux
+      - windows
+    goarch:
+      - '386'
+      - amd64
+      - arm
+      - arm64
+      - s390x
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: darwin
+        goarch: s390x
+      - goos: freebsd
+        goarch: s390x
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: s390x
+
+archives:
+  - formats:
+      - zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+signs:
+  - artifacts: checksum
+    args:
+      - --batch
+      - --local-user
+      - '{{ .Env.GPG_FINGERPRINT }}'
+      - --output
+      - '${signature}'
+      - --detach-sign
+      - '${artifact}'
+
+release:
+  github:
+    owner: sebclem
+    name: opentofu-provider-caddy
+  draft: false
+  prerelease: auto
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+changelog:
+  disable: true
