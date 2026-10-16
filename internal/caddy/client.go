@@ -25,9 +25,10 @@ type Options struct {
 	ConflictRetries                                        int
 }
 type Snapshot struct {
-	Value Value
-	ETag  string
-	Path  Path
+	AfterWrite bool
+	Value      Value
+	ETag       string
+	Path       Path
 }
 type Client struct {
 	options  Options
