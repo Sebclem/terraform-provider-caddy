@@ -1,6 +1,6 @@
 # Caddy provider design
 
-Status: Draft for review, 2026-10-16.
+Status: Draft for review, 2026-10-16. Covers the first release and agreed later increments.
 
 ## Purpose and scope
 
@@ -18,7 +18,7 @@ The first increment provides a complete HTTP reverse-proxy lifecycle using three
 
 Routes are active immediately, including while empty or incomplete during apply. There is no activation resource, staging sentinel, deactivation sequence or multi-resource transaction. Every individual mutation must still be accepted by Caddy. Partial routing behavior during assembly and destruction is accepted.
 
-Later increments add proxy transport, health checks and headers; authentication and access restrictions; certificate loading and TLS policy; logging and error handling; then remaining routing needs and migration examples. Each increment has its own focused design and tests. The first increment is not full parity with the Ansible configuration.
+Later increments cover the specific features used by this repository, in the order below. Each increment has focused design and tests. The first increment is not full parity with the Ansible configuration. Named routes and relay support follow the active migration and do not block it. No goal of covering every built-in Caddy module is implied.
 
 ## Provider configuration
 
@@ -70,7 +70,7 @@ Own the server identity and listening addresses. Preserve independently managed 
 
 The first increment supports host matching only. Multiple match blocks represent alternatives; future matcher fields within one block will combine according to Caddy matcher semantics. An omitted match collection on a new route matches all requests. An explicitly empty collection also expresses no matcher restriction.
 
-Own route identity, supported matcher fields and configured flags. Preserve the handler collection during route updates. Unsupported matcher fields encountered during import are retained internally and preserved; they are not editable through a raw payload. Do not invent a simplified typed representation when the live configuration cannot be represented faithfully.
+Own route identity, supported matcher fields and configured flags. Preserve the handler collection during route updates. Unsupported matcher fields encountered during import are preserved internally when an owned-field update can safely leave them intact. If the provider cannot safely represent or preserve the imported object, import fails with a precise diagnostic. Do not invent a simplified typed representation or expose a raw payload.
 
 ### caddy_handler_reverse_proxy
 
@@ -160,7 +160,7 @@ Keep requested ordering intent in state. Refresh checks whether the live orderin
 
 ## Import
 
-Import accepts only the existing object's Caddy `@id`. No path-based import, content matching, automatic ID assignment or migration feature for objects without IDs is supported.
+Import accepts only the existing object's Caddy `@id`. Resources whose Caddy location has no `@id`, including the metrics singleton, have no import support. No path-based import, content matching, automatic ID assignment or migration feature for objects without IDs is supported.
 
 Read the object, verify its type and discover its server name or parent ID. For child resources, the immediate parent must also have an ID so the typed parent reference can be represented; otherwise reject import with a clear diagnostic. Importing a parent does not import its children.
 
@@ -189,8 +189,52 @@ Required checks:
 
 Use unit tests for serialization and transport failures, real Caddy for API semantics, and CLI acceptance tests for state behavior. Record tested Terraform/OpenTofu versions per release. State updates must satisfy framework consistency requirements. [Terraform resource update guidance](https://developer.hashicorp.com/terraform/plugin/framework/resources/update)
 
+## Later increments for the active repository
+
+The later resource names describe intended typed boundaries. They must be checked against adapted Caddy v2.11.7 JSON before their schemas are finalized. Every later resource has the same guarded CRUD, drift and OpenTofu/Terraform lifecycle requirements as the first three resources. Support only behavior used by the repository; add other modules only through a separate design decision.
+
+### Proxy options
+
+Extend `caddy_handler_reverse_proxy` with typed nested HTTP transport, request header operations, request and response buffer sizes, flush interval and active health check. Upstreams remain static. A hostname in a static `dial` value is still a static upstream; the `dynamic_upstreams` modules for DNS A/AAAA and SRV discovery are excluded.
+
+The transport must allow TLS for selected backends and explicitly requested certificate verification bypass, without making insecure verification a global default. Request headers must cover Unifi's upstream `Host` override. Buffer and flush settings must cover Speedtest's configured values, including its negative flush interval. The active health check must cover URI, redirect following, failure count and timeout. Additional hostnames in the legacy loader have no health check by default; migration examples must preserve that distinction.
+
+Each nested option is updated through the smallest safe API scope within the reverse-proxy handler. A transport edit does not replace the route. The handler's `@id` remains stable.
+
+### Routing and access control
+
+Extend route matcher blocks with typed path, method and client-IP conditions. Conditions within a block are ANDed; matcher blocks are ORed. A typed `not` block represents Caddy's negated matcher sets, including the current whitelist and WebDAV rules. Use the actual `client_ip` matcher and a typed trusted-proxies setting on `caddy_http_server`, so forwarded addresses are trusted only from configured proxy ranges. Validate direct and proxied IPv4/IPv6 traffic, including spoofed headers from untrusted peers.
+
+Introduce `caddy_handler_subroute`, with independently managed child `caddy_http_route` resources. A child route names its parent subroute instead of a server. Child handlers remain independent. Route ordering and identity rules apply within each child collection. This supports the Jellyfin exact `/metrics` path and fallback behavior without embedding opaque route arrays.
+
+Introduce `caddy_handler_forward_auth`, `caddy_handler_basic_auth` and `caddy_handler_error`. The forward-auth resource has typed upstream, URI and copied-header settings and internally serializes Caddy's actual proxy precheck. Basic-auth accounts use typed username and password-hash fields, marked sensitive; hashes are not treated as plaintext. Error handlers cover status and message for the 403 denial cases. The provider must preserve authentication-before-application ordering through `before_id`/`after_id`. Compare adapted Caddyfile behavior for Authelia, VMagent, whitelist combinations, WebDAV methods and Jellyfin before claiming parity.
+
+### TLS and redirects
+
+Introduce an independent `caddy_tls_certificate` resource for an existing certificate/key file pair on the Caddy host. File provisioning, renewal and reloading after same-path content changes are operator responsibilities. Path changes update the configured file loader in place. Certificate resources are shared when sites use the same pair. No ACME issuance support is included.
+
+Add typed server TLS/automatic-HTTPS settings needed to serve those certificates and provide HTTP-to-HTTPS redirects. The exact generated JSON, SNI certificate selection and redirect configuration must be established with a pinned Caddy adaptation fixture; do not assume a host-matched HTTP route alone configures TLS. Test that a site serves its intended certificate, redirects HTTP, and does not issue an unexpected certificate. Add an independent TLS connection-policy resource only if the fixture shows that an explicit policy is necessary to reproduce the current behavior.
+
+### Logs and error pages
+
+Introduce independent `caddy_log` and `caddy_log_binding` resources. A log owns a named destination and typed file-writer options, including path, mode, rotation size and local-time option. A binding owns one hostname-to-log association within a server and updates the corresponding map entry without replacing other host mappings. The provider must preserve the effective default-log filtering behavior of the current Caddyfile; any shared filter has one explicit owner.
+
+Introduce a high-level `caddy_error_pages` resource attached to a subroute. It owns the error route and its ordered root, rewrite and file-server handlers, with typed page root and page URI. It generates stable internal IDs where supported, but its internal handlers are not separate public resources or individually importable. An error-page setting change updates this resource in place. Keep its request status behavior and missing-file behavior aligned with the adapted configuration. Error-page files themselves remain external.
+
+### Metrics and later inactive features
+
+Introduce a typed `caddy_http_metrics` resource for the current per-host setting. The underlying Caddy metrics node has no natural `@id`; this resource has a documented singleton state identity and **does not support import**, in line with the ID-only import rule. Creation and updates must preserve unrelated HTTP application settings.
+
+Named routes and relay configuration are inactive in the current deployment. Add independent typed named-route and invoke-handler support, plus relay composition, in a later increment when needed. Their absence does not block migration of the currently active configuration.
+
+### Migration coverage
+
+Before cutover, use a safe fixture to render and adapt the existing Caddyfile and inventory. Produce typed OpenTofu examples for every active site pattern and verify route order, authentication, proxy settings, TLS, logs and errors against that fixture. No raw JSON or Caddyfile input appears in the provider configuration. Do not run the installation, DNS or monitoring tasks to obtain the fixture.
+
+The cutover **rebuilds** the active Caddy configuration from OpenTofu. Downtime during the controlled rebuild is acceptable. Existing Caddyfile objects without `@id` are not imported or patched to add IDs. Retain a backup and an operator recovery procedure, then stop Ansible from writing and reloading that configuration. Apply the complete typed configuration and check HTTPS, redirects, authentication, access restrictions, proxy responses, health checks, logs and metrics. The provider does not own the admin listener or service startup settings.
+
 ## Operational handoff
 
-Ansible currently writes and reloads a Caddyfile. Before production cutover, stop that configuration ownership and arrange startup persistence for API-managed configuration. This is an operator prerequisite, not service-management functionality in the provider. Caddy documents saved configuration and resume startup behavior. [Caddy API persistence](https://caddyserver.com/docs/api)
+Ansible currently writes and reloads a Caddyfile. Before production cutover, stop that configuration ownership and arrange startup persistence for API-managed configuration. The admin listener remains an external prerequisite because changing it through the same connection can disconnect the provider. This is an operator prerequisite, not service-management functionality in the provider. Caddy documents saved configuration and resume startup behavior. [Caddy API persistence](https://caddyserver.com/docs/api)
 
 The first milestone is complete when its three resources satisfy the acceptance checks on both CLIs, with documented installation and usage. Full repository migration is a later milestone after the necessary typed features exist.

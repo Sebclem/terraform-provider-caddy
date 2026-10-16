@@ -29,17 +29,20 @@ The provider MUST support both Terraform and OpenTofu. OpenTofu compatibility is
 
 Deliver features incrementally. The proposed first milestone covers connection to an existing admin API, an HTTP server, a host-matched route and a reverse-proxy handler with typed upstream settings. Validate lifecycle operations and selective updates against an isolated Caddy instance.
 
-Subsequent increments cover the remaining repository behavior, including proxy transport and health checks, authentication, access restrictions, certificate loading, logging and error handling. Production migration follows coverage of the required behavior.
+Subsequent increments cover only repository-used behavior: static proxy options and nested health checks; typed matchers, trusted proxies, child routes and authentication; existing-file certificates and HTTP-to-HTTPS redirects; named logs, independent hostname bindings and a high-level error-page resource; per-host metrics. Named routes and relay support are deferred until needed. Production migration follows coverage of the active behavior.
 
 ## Agreed lifecycle and connection decisions
 
 - Servers, routes and handlers are independently managed; handler settings such as upstreams are typed nested configuration.
 - No activation or deactivation mechanism is provided. Incomplete active routes during apply are acceptable.
-- Import is supported only for existing objects with Caddy `@id`. Objects without IDs are unsupported.
+- Import is supported only for existing objects with Caddy `@id`. Objects without IDs, including the metrics singleton, cannot be imported.
 - Support mutually exclusive `before_id` and `after_id` ordering constraints.
 - Generate UUID v4 identifiers when `object_id` is omitted; preserve established IDs across updates.
 - Support HTTP and HTTPS, including custom CA trust and optional mutual TLS. Unix sockets are excluded.
 - Updates preserve unrelated fields and independent children. Deletion removes the entire resource subtree.
 - Assume OpenTofu is the sole configuration manager of an instance. Terraform is a supported alternative.
+- Rebuild the active configuration from OpenTofu at cutover; downtime is acceptable. Do not import or add IDs to the current ID-less Caddyfile objects.
+- Keep the Caddy admin listener outside provider management. Existing certificate files and their renewal/reload workflow remain operator responsibilities.
+- Support only features used by this repository; named routes and relay support can follow the active migration.
 
 The detailed design is in [Caddy provider design](design.md). It is a draft for review; implementation planning follows design approval.
