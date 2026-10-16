@@ -123,3 +123,9 @@ func (f *Fixture) Requests() []Request {
 	return append([]Request(nil), f.requests...)
 }
 func (f *Fixture) ResetRequests() { f.mu.Lock(); defer f.mu.Unlock(); f.requests = nil }
+
+func (f *Fixture) SetFault(fn func(http.ResponseWriter, *http.Request) bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Fault = fn
+}

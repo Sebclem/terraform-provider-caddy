@@ -95,3 +95,30 @@ func TestMutateDeadline(t *testing.T) {
 		t.Fatal("deadline ignored")
 	}
 }
+
+func TestMutateLostResponseNoRetries(t *testing.T) {
+	n := 0
+	writes := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("ETag", `"e"`)
+			json.NewEncoder(w).Encode(map[string]any{"n": n})
+			return
+		}
+		writes++
+		n = 1
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	defer s.Close()
+	c, _ := NewClient(Options{Endpoint: s.URL, ConflictRetries: 0})
+	err := c.Mutate(context.Background(), Path{"config"}, func(s Snapshot) (Decision, error) {
+		if s.Value.(map[string]any)["n"] == json.Number("1") {
+			return Decision{Done: true}, nil
+		}
+		return Decision{Method: "PATCH", Path: Path{"config", "n"}, Body: 1}, nil
+	})
+	if err != nil || writes != 1 {
+		t.Fatalf("lost response: writes %d err %v", writes, err)
+	}
+}

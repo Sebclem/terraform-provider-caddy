@@ -19,6 +19,7 @@ type Decision struct {
 type Reconcile func(Snapshot) (Decision, error)
 
 var endpointLocks sync.Map
+var ErrUncertainWrite = errors.New("Caddy write outcome requires recovery")
 
 func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -33,11 +34,13 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 		return ctx.Err()
 	}
 	afterWrite := false
+	verifiedWrite := false
+	var lastErr error
 	for attempt := 0; ; attempt++ {
 		snap, err := c.Get(ctx, scope)
 		if err != nil {
 			if afterWrite {
-				return fmt.Errorf("cannot reconcile uncertain write; retain resource ID for recovery: %w", err)
+				return fmt.Errorf("%w: readback failed: %w", ErrUncertainWrite, err)
 			}
 			return err
 		}
@@ -52,20 +55,25 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 		if snap.ETag == "" {
 			return errors.New("Caddy did not return ETag; conditional writes are required")
 		}
+		if verifiedWrite {
+			return errors.New("Caddy readback differs from the requested configuration")
+		}
 		if attempt > c.options.ConflictRetries {
-			return errors.New("Caddy mutation did not converge within retry limit")
+			return fmt.Errorf("Caddy mutation retry limit reached after reconciliation: %w", lastErr)
 		}
 		err = c.Write(ctx, decision.Method, decision.Path, decision.Body, snap.ETag)
 		var he *HTTPError
 		if err == nil {
 			afterWrite = true
+			verifiedWrite = true
 			continue
 		}
 		if errors.As(err, &he) && he.Status != 412 {
 			return err
 		}
+		lastErr = err
 		afterWrite = !IsStatus(err, 412)
-		if attempt >= c.options.ConflictRetries {
+		if attempt >= c.options.ConflictRetries && !afterWrite {
 			return fmt.Errorf("Caddy mutation retry limit reached: %w", err)
 		}
 		timer := time.NewTimer(time.Duration(5+rand.IntN(15)) * time.Millisecond)
