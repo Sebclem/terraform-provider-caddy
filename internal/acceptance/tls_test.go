@@ -106,6 +106,27 @@ resource "caddy_handler_reverse_proxy" "app" {
 	r.run(0, "state", "rm", "caddy_tls_certificate.app")
 	r.run(0, "import", "-input=false", "-no-color", "caddy_tls_certificate.app", id)
 	r.run(0, "plan", "-detailed-exitcode", "-input=false", "-no-color")
+	// Same-path renewal is external: it must not cause a provider write/reload.
+	originalSerial := resp.TLS.PeerCertificates[0].SerialNumber.String()
+	certificate(t, dir, "app.test")
+	r.f.ResetRequests()
+	r.run(0, "plan", "-detailed-exitcode", "-input=false", "-no-color")
+	r.run(0, "apply", "-auto-approve", "-input=false", "-no-color")
+	r.noWrites()
+	client.CloseIdleConnections()
+	renewed, e := client.Get(fmt.Sprintf("https://127.0.0.1:%d", r.port))
+	if e != nil {
+		t.Fatal(e)
+	}
+	renewed.Body.Close()
+	if renewed.TLS.PeerCertificates[0].SerialNumber.String() != originalSerial {
+		t.Fatal("same-path renewal unexpectedly reloaded certificate")
+	}
+	bad := strings.Replace(cfg, cp, filepath.Join(dir, "missing.pem"), 1)
+	r.write(bad)
+	r.run(1, "apply", "-auto-approve", "-input=false", "-no-color")
+	r.write(cfg)
+	r.run(0, "plan", "-detailed-exitcode", "-input=false", "-no-color")
 	cp2, kp2 := certificate(t, dir, "second.test")
 	r.write(strings.ReplaceAll(strings.ReplaceAll(cfg, cp, cp2), kp, kp2))
 	r.run(0, "apply", "-auto-approve", "-input=false", "-no-color")

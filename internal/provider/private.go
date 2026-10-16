@@ -34,7 +34,7 @@ func saveOwned(ctx context.Context, p privateWriter, o Ownership) diag.Diagnosti
 func ownershipRevision(o Ownership) string {
 	var keys []string
 	for k, v := range o {
-		if v && !strings.Contains(k, ".") {
+		if v {
 			keys = append(keys, k)
 		}
 	}

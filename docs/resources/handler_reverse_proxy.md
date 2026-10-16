@@ -36,3 +36,5 @@ Optional typed settings:
 | `health` | `{uri = string, follow_redirects = bool, fails = number, timeout = string}`; positive timeout. |
 
 Omitted nested options are not global defaults. A timeout-only change writes the nested timeout field and retains unrelated active-health/transport fields. Headers support native Caddy placeholders, e.g. `Host = ["{http.request.hostport}"]`. A hostname in a static upstream dial is allowed; dynamic upstream modules are unsupported.
+
+Inside `transport`, `tls` is required. Configure `insecure_skip_verify` or `server_name` only with `tls = true`. Turning TLS off removes the native TLS container; omitting a previously managed nested setting releases/removes that setting while preserving unowned siblings.

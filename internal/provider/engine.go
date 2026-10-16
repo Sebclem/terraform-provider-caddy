@@ -42,11 +42,7 @@ func lookup(s caddy.Snapshot, m managed) (caddy.Object, error) {
 		}
 		return o, nil
 	}
-	if m.kind == "forward_auth" {
-		if e := recognizeForwardAuth(o.Value); e != nil {
-			return o, e
-		}
-	}
+
 	if len(o.Path) < 3 || o.Path[len(o.Path)-2] != collection(m.kind) {
 		return o, errors.New("ID has the wrong object type or collection")
 	}
@@ -178,6 +174,17 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 			return caddy.Decision{}, e
 		}
 		desired := caddy.Clone(m.fields).(map[string]any)
+		if m.kind == "server" && owned["automatic_https"] && desired["automatic_https"] == nil {
+			desired["automatic_https"] = map[string]any{"disable": true}
+		}
+		if m.kind == "error_pages" {
+			preserveInternalIDs(o.Value, desired)
+			if recognizeTemplate(m.kind, m.id, o.Value) != nil {
+				body := objectBody(m)
+				preserveInternalIDs(o.Value, body)
+				return caddy.Decision{Method: "PATCH", Path: caddy.Path{"id", m.id}, Body: body}, nil
+			}
+		}
 		if m.kind == "server" {
 			if auto, ok := desired["automatic_https"].(map[string]any); ok && auto["disable_certificates"] == true {
 				if policies, ok := o.Value["tls_connection_policies"]; ok {
@@ -222,7 +229,9 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 			}
 			desired["upstreams"] = merged
 		}
-		desired = mergeFields(o.Value, desired, owned, "")
+		if m.kind != "forward_auth" {
+			desired = mergeFields(o.Value, desired, owned, "")
+		}
 		intent, _, _ := PlanFields(desired, o.Value, owned)
 		var edits []change
 		for k, v := range intent.Set {
@@ -273,6 +282,25 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 		}
 		for _, k := range intent.Remove {
 			delete(body, k)
+		}
+		scope := append(caddy.Path(nil), edits[0].p...)
+		for _, edit := range edits[1:] {
+			n := 0
+			for n < len(scope) && n < len(edit.p) && scope[n] == edit.p[n] {
+				n++
+			}
+			scope = scope[:n]
+		}
+		if len(scope) > 0 {
+			payload, e := caddy.At(body, scope)
+			if e != nil {
+				return caddy.Decision{}, e
+			}
+			method := "PATCH"
+			if _, e := caddy.At(o.Value, scope); errors.Is(e, caddy.ErrNotFound) {
+				method = "POST"
+			}
+			return caddy.Decision{Method: method, Path: append(caddy.Path{"id", m.id}, scope...), Body: payload}, nil
 		}
 		return caddy.Decision{Method: "PATCH", Path: caddy.Path{"id", m.id}, Body: body}, nil
 	})

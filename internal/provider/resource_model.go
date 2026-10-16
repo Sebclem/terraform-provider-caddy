@@ -206,8 +206,16 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 	}
 	m.ObjectID = m.ID
 	previousExtra := m.Extra
+	templateDrift := recognizeTemplate(r.kind, m.ID.ValueString(), o.Value) != nil
+	if templateDrift {
+		m.Revision = types.StringValue("template-drift")
+	}
 	m.Extra = map[string]attr.Value{}
 	for k, f := range fields(r.kind) {
+		if templateDrift && previousExtra[k] != nil && fullyKnown(previousExtra[k]) {
+			m.Extra[k] = previousExtra[k]
+			continue
+		}
 		raw, err := observedField(r.kind, k, o.Value)
 		if err != nil {
 			return m, err

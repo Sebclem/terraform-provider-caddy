@@ -48,7 +48,7 @@ func fields(kind string) map[string]fieldSpec {
 		}
 	case "proxy":
 		return map[string]fieldSpec{
-			"transport":       {object(map[string]schema.Attribute{"tls": boolean(), "insecure_skip_verify": boolean(), "server_name": str(false)}), "transport"},
+			"transport":       {object(map[string]schema.Attribute{"tls": schema.BoolAttribute{Required: true}, "insecure_skip_verify": boolean(), "server_name": str(false)}), "transport"},
 			"request_headers": {object(map[string]schema.Attribute{"set": schema.MapAttribute{Optional: true, Computed: true, ElementType: types.ListType{ElemType: types.StringType}}, "add": schema.MapAttribute{Optional: true, Computed: true, ElementType: types.ListType{ElemType: types.StringType}}, "delete": list()}), "headers"},
 			"request_buffers": {integer(), "request_buffers"}, "response_buffers": {integer(), "response_buffers"}, "flush_interval": {str(false), "flush_interval"},
 			"health": {object(map[string]schema.Attribute{"uri": str(false), "follow_redirects": boolean(), "fails": integer(), "timeout": str(false)}), "health_checks"},
@@ -290,6 +290,7 @@ func nativeKey(k string, f fieldSpec) string {
 	return f.native
 }
 func markLeaves(o Ownership, prefix string, v any) {
+	o[prefix] = true
 	if m, ok := v.(map[string]any); ok {
 		for k, v := range m {
 			markLeaves(o, prefix+"."+k, v)
@@ -356,9 +357,14 @@ func validateExtra(ctx context.Context, r *caddyResource, g getter, d *diag.Diag
 				d.AddError("Empty accounts", "At least one bcrypt account is required.")
 			}
 		case "transport":
-			if m, ok := n.(map[string]any); ok && m["insecure_skip_verify"] == true && m["tls"] != true {
-				d.AddError("Invalid transport TLS", "insecure_skip_verify requires tls = true.")
+			if m, ok := n.(map[string]any); ok && m["tls"] != true {
+				_, skip := m["insecure_skip_verify"]
+				_, name := m["server_name"]
+				if skip || name {
+					d.AddError("Invalid transport TLS", "insecure_skip_verify and server_name require tls = true.")
+				}
 			}
+
 		case "flush_interval":
 			if _, e := time.ParseDuration(fmt.Sprint(n)); e != nil {
 				d.AddError("Invalid flush interval", "Use a duration such as -1ns or 100ms.")
@@ -446,4 +452,47 @@ func fullyKnown(v attr.Value) bool {
 		}
 	}
 	return true
+}
+func nestedOwnershipPath(key, nested string) string {
+	switch key {
+	case "health":
+		return "health_checks.active." + nested
+	case "transport":
+		if nested == "tls" {
+			return "transport.tls"
+		}
+		return "transport.tls." + nested
+	case "request_headers":
+		return "headers.request." + nested
+	}
+	return key + "." + nested
+}
+func planNestedValue(ctx context.Context, key, prefix string, cfg, previous attr.Value, owned Ownership) attr.Value {
+	if cfg.IsUnknown() {
+		return cfg
+	}
+	if cfg.IsNull() {
+		if !owned[nestedOwnershipPath(key, prefix)] && previous != nil {
+			return previous
+		}
+		v, _ := typedValue(ctx, cfg.Type(ctx), nil)
+		return v
+	}
+	obj, ok := cfg.(types.Object)
+	if !ok {
+		return cfg
+	}
+	old := map[string]attr.Value{}
+	if o, ok := previous.(types.Object); ok && !o.IsNull() && !o.IsUnknown() {
+		old = o.Attributes()
+	}
+	result := map[string]attr.Value{}
+	for k, v := range obj.Attributes() {
+		p := k
+		if prefix != "" {
+			p = prefix + "." + k
+		}
+		result[k] = planNestedValue(ctx, key, p, v, old[k], owned)
+	}
+	return types.ObjectValueMust(obj.AttributeTypes(ctx), result)
 }

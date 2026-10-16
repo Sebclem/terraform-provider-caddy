@@ -99,3 +99,45 @@ func recognizeForwardAuth(obj map[string]any) error {
 	}
 	return nil
 }
+func recognizeTemplate(kind, id string, obj map[string]any) error {
+	if kind == "forward_auth" {
+		return recognizeForwardAuth(obj)
+	}
+	if kind != "error_pages" {
+		return nil
+	}
+	root, e := observedField(kind, "root", obj)
+	if e != nil {
+		return e
+	}
+	uri, e := observedField(kind, "page_uri", obj)
+	if e != nil {
+		return e
+	}
+	expected := errorPagesFields(id, root, uri)
+	expected["@id"] = id
+	preserveInternalIDs(obj, expected)
+	if !reflect.DeepEqual(caddy.Clone(expected), obj) {
+		return fmt.Errorf("error-page import requires the complete fixed sequence")
+	}
+	return nil
+}
+func preserveInternalIDs(live, desired map[string]any) {
+	old, _ := live["handle"].([]any)
+	next, _ := desired["handle"].([]any)
+	for i, v := range next {
+		if i >= len(old) {
+			continue
+		}
+		a, ok := old[i].(map[string]any)
+		b, bok := v.(map[string]any)
+		if !ok || !bok || a["handler"] != b["handler"] {
+			continue
+		}
+		if id, exists := a["@id"]; exists {
+			b["@id"] = id
+		} else {
+			delete(b, "@id")
+		}
+	}
+}

@@ -103,3 +103,24 @@ func TestProxyStructuralIDs(t *testing.T) {
 		t.Fatalf("structural edit created duplicate IDs: %v", e)
 	}
 }
+func TestProxyCorrelatedHealthUpdate(t *testing.T) {
+	ctx, c, f := connection(t)
+	objects := []managed{{kind: "server", id: "srv", name: "main", fields: map[string]any{"listen": []any{"127.0.0.1:0"}}}, {kind: "route", id: "route", parent: "srv", fields: map[string]any{}}, {kind: "proxy", id: "proxy", parent: "route", fields: map[string]any{"upstreams": []any{map[string]any{"dial": "127.0.0.1:9999"}}, "health_checks": map[string]any{"active": map[string]any{"uri": "/health", "timeout": "20s", "fails": 3}}}}}
+	for _, m := range objects {
+		if e := createObject(ctx, c, m); e != nil {
+			t.Fatal(e)
+		}
+	}
+	m := objects[2]
+	m.fields["health_checks"].(map[string]any)["active"].(map[string]any)["timeout"] = "21s"
+	m.fields["health_checks"].(map[string]any)["active"].(map[string]any)["fails"] = 4
+	f.ResetRequests()
+	if e := updateObject(ctx, c, m, Ownership{"upstreams": true, "health_checks": true}); e != nil {
+		t.Fatal(e)
+	}
+	for _, q := range f.Requests() {
+		if q.Method != "GET" && q.Path != "/id/proxy/health_checks/active" {
+			t.Fatalf("correlated edits must use common ancestor, got %s", q.Path)
+		}
+	}
+}

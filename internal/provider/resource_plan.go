@@ -12,7 +12,15 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 	if req.Plan.Raw.IsNull() {
 		return
 	}
-	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("configuration_revision"), types.StringValue(ownershipRevision(r.configOwnership(ctx, req.Config))))...)
+	revision := types.StringValue(ownershipRevision(r.configOwnership(ctx, req.Config)))
+	for k := range fields(r.kind) {
+		var v attr.Value
+		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root(k), &v)...)
+		if v != nil && !fullyKnown(v) {
+			revision = types.StringUnknown()
+		}
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("configuration_revision"), revision)...)
 	var explicit types.String
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("object_id"), &explicit)...)
 	creating := req.State.Raw.IsNull()
@@ -68,7 +76,18 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 	for k, f := range fields(r.kind) {
 		var cfg attr.Value
 		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root(k), &cfg)...)
-		if cfg == nil || !cfg.IsNull() {
+		if cfg == nil {
+			continue
+		}
+		if !cfg.IsNull() {
+			if obj, ok := cfg.(types.Object); ok && !obj.IsUnknown() {
+				var previous attr.Value
+				if !req.State.Raw.IsNull() {
+					resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(k), &previous)...)
+				}
+				value := planNestedValue(ctx, k, "", cfg, previous, ownedFields(ctx, req.Private))
+				resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root(k), value)...)
+			}
 			continue
 		}
 		v, _ := typedValue(ctx, f.attribute.GetType(), nil)

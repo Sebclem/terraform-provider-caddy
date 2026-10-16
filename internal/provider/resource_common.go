@@ -26,6 +26,7 @@ func (r *caddyResource) Create(ctx context.Context, req resource.CreateRequest, 
 	m.ID = types.StringValue(id)
 	m.ObjectID = m.ID
 	owned := r.configOwnership(ctx, req.Config)
+	m.Revision = types.StringValue(ownershipRevision(owned))
 	v, d := r.managed(ctx, m, owned)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -84,6 +85,7 @@ func (r *caddyResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 	owned := r.configOwnership(ctx, req.Config)
+	m.Revision = types.StringValue(ownershipRevision(owned))
 	v, d := r.managed(ctx, m, owned)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -128,6 +130,13 @@ func (r *caddyResource) ImportState(ctx context.Context, req resource.ImportStat
 	}
 	m := model{ID: types.StringValue(req.ID), ObjectID: types.StringValue(req.ID), Before: types.StringNull(), After: types.StringNull(), Name: types.StringNull(), Parent: types.StringNull()}
 	s, e := r.client.Get(ctx, caddy.Path{"config"})
+	if e == nil {
+		var o caddy.Object
+		o, e = lookup(s, managed{kind: r.kind, id: req.ID})
+		if e == nil {
+			e = recognizeTemplate(r.kind, req.ID, o.Value)
+		}
+	}
 	if e == nil {
 		m, e = r.live(ctx, s, m)
 	}

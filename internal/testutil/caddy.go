@@ -68,7 +68,9 @@ func StartCaddy(t *testing.T) *Fixture {
 			cmd.Process.Kill()
 			<-done
 		}
-        if t.Failed(){t.Logf("Caddy log: %s",log.String())}
+		if t.Failed() {
+			t.Logf("Caddy log: %s", log.String())
+		}
 	})
 	ready := false
 	client := &http.Client{Timeout: 100 * time.Millisecond}

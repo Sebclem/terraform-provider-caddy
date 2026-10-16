@@ -16,7 +16,7 @@ Manages one route within an HTTP server. Routes are live immediately; no activat
 
 Optional fields never configured are observed and preserved. Removing a previously configured field removes it from Caddy. Route edits preserve independently managed handlers. Deletion removes the route and all handlers within it.
 
-Import uses the route's Caddy ID and discovers its parent server ID. The parent must have an ID. Only host-only matcher sets are representable in this release. First apply after import can record optional-field ownership without a Caddy write, followed by an empty plan.
+Import uses the route's Caddy ID and discovers its parent server or subroute ID. The parent must have an ID. Only the documented typed matcher sets are representable; unknown modules or deeper negation are rejected. First apply after import can record optional-field ownership without a Caddy write, followed by an empty plan.
 
 ```hcl
 resource "caddy_http_route" "app" {

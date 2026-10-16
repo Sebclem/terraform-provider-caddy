@@ -22,10 +22,11 @@ type settingsResource struct {
 	client *caddy.Client
 }
 type settingsModel struct {
-	ID       types.String `tfsdk:"id"`
-	Server   types.String `tfsdk:"server_id"`
-	Hostname types.String `tfsdk:"hostname"`
-	Log      types.String `tfsdk:"log_id"`
+	TargetSatisfied types.Bool   `tfsdk:"target_satisfied"`
+	ID              types.String `tfsdk:"id"`
+	Server          types.String `tfsdk:"server_id"`
+	Hostname        types.String `tfsdk:"hostname"`
+	Log             types.String `tfsdk:"log_id"`
 }
 type metricsModel struct {
 	ID      types.String `tfsdk:"id"`
@@ -46,6 +47,7 @@ func (r *settingsResource) Schema(_ context.Context, _ resource.SchemaRequest, p
 	if r.kind == "metrics" {
 		a["per_host"] = schema.BoolAttribute{Required: true}
 	} else {
+		a["target_satisfied"] = schema.BoolAttribute{Computed: true, Description: "Whether the live hostname mapping resolves to its identified named log."}
 		replace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 		a["server_id"] = schema.StringAttribute{Required: true, PlanModifiers: replace}
 		a["hostname"] = schema.StringAttribute{Required: true, PlanModifiers: replace}
@@ -72,6 +74,7 @@ func (r *settingsResource) ModifyPlan(ctx context.Context, q resource.ModifyPlan
 		p.Diagnostics.Append(p.Plan.SetAttribute(ctx, path.Root("id"), types.StringValue("http-metrics"))...)
 		return
 	}
+	p.Diagnostics.Append(p.Plan.SetAttribute(ctx, path.Root("target_satisfied"), types.BoolValue(true))...)
 	var old, next settingsModel
 	p.Diagnostics.Append(q.State.Get(ctx, &old)...)
 	p.Diagnostics.Append(q.Plan.Get(ctx, &next)...)
@@ -89,7 +92,7 @@ func (r *settingsResource) desired(ctx context.Context, g getter) (settingsModel
 		return settingsModel{ID: types.StringValue("http-metrics")}, caddy.Path{"config", "apps", "http", "metrics"}, map[string]any{"per_host": b.ValueBool()}, nil
 	}
 	var m settingsModel
-	for k, v := range map[string]any{"id": &m.ID, "server_id": &m.Server, "hostname": &m.Hostname, "log_id": &m.Log} {
+	for k, v := range map[string]any{"id": &m.ID, "server_id": &m.Server, "hostname": &m.Hostname, "log_id": &m.Log, "target_satisfied": &m.TargetSatisfied} {
 		if d := g.GetAttribute(ctx, path.Root(k), v); d.HasError() {
 			return m, nil, nil, fmt.Errorf("invalid binding config")
 		}
@@ -97,6 +100,7 @@ func (r *settingsResource) desired(ctx context.Context, g getter) (settingsModel
 	if m.Hostname.ValueString() == "" {
 		return m, nil, nil, errors.New("hostname must not be empty")
 	}
+	m.TargetSatisfied = types.BoolValue(true)
 	m.ID = types.StringValue(fmt.Sprintf("binding-%x", sha256.Sum256([]byte(m.Server.ValueString()+"\x00"+m.Hostname.ValueString()))))
 	return m, nil, nil, nil
 }
@@ -266,6 +270,11 @@ func (r *settingsResource) Read(ctx context.Context, q resource.ReadRequest, p *
 		return
 	}
 	raw, e := caddy.At(s.Value, []string{"logging", "logs", name})
+	if errors.Is(e, caddy.ErrNotFound) {
+		m.TargetSatisfied = types.BoolValue(false)
+		p.Diagnostics.Append(p.State.Set(ctx, m)...)
+		return
+	}
 	if e != nil {
 		p.Diagnostics.AddError("Invalid log reference", e.Error())
 		return

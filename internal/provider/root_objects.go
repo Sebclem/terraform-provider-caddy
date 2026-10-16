@@ -86,19 +86,7 @@ func lookupErrorPages(s caddy.Snapshot, m managed, o caddy.Object) (caddy.Object
 	if id == "" || (m.parent != "" && id != m.parent) {
 		return o, errors.New("invalid error-page parent ID")
 	}
-	root, e := observedField("error_pages", "root", o.Value)
-	if e != nil {
-		return o, e
-	}
-	uri, e := observedField("error_pages", "page_uri", o.Value)
-	if e != nil {
-		return o, e
-	}
-	expected := errorPagesFields(m.id, root, uri)
-	expected["@id"] = m.id
-	if !reflect.DeepEqual(caddy.Clone(expected), o.Value) {
-		return o, errors.New("error-page import requires the complete provider-owned fixed sequence, including child IDs")
-	}
+
 	return o, nil
 }
 func createErrorPages(s caddy.Snapshot, m managed, want map[string]any) (caddy.Decision, error) {
