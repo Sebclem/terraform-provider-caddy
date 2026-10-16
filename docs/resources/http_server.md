@@ -20,3 +20,5 @@ resource "caddy_http_server" "main" {
   listen = ["127.0.0.1:8080"]
 }
 ```
+
+`trusted_proxies` optionally takes static IP/CIDR strings; Caddy trusts forwarded client addresses only from these peers. `https = true` adds a default TLS connection policy and enables HTTP-to-HTTPS redirects with `automatic_https.disable_certificates = true`. Reference certificate resources through `depends_on` to load files before serving. No issuer/ACME configuration is created. Default HTTP/HTTPS ports are Caddy's externally configured app ports (80/443); isolated tests use external bootstrap ports. Existing TLS policies survive ordinary listener/setting updates. New servers default to HTTP; importing a server observes optional settings without claiming them until configured.

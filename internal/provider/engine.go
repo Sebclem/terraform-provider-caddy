@@ -17,7 +17,7 @@ type managed struct {
 }
 
 func collection(kind string) string {
-	if kind == "proxy" {
+	if _, ok := handlerNames[kind]; ok {
 		return "handle"
 	}
 	return "routes"
@@ -26,6 +26,12 @@ func lookup(s caddy.Snapshot, m managed) (caddy.Object, error) {
 	o, e := caddy.Resolve(s, m.id)
 	if e != nil {
 		return o, e
+	}
+	if m.kind == "error_pages" {
+		return lookupErrorPages(s, m, o)
+	}
+	if m.kind == "certificate" || m.kind == "log" {
+		return lookupRoot(s, m, o)
 	}
 	if m.kind == "server" {
 		if len(o.Path) != 5 || !reflect.DeepEqual(o.Path[:4], caddy.Path{"config", "apps", "http", "servers"}) {
@@ -36,10 +42,15 @@ func lookup(s caddy.Snapshot, m managed) (caddy.Object, error) {
 		}
 		return o, nil
 	}
+	if m.kind == "forward_auth" {
+		if e := recognizeForwardAuth(o.Value); e != nil {
+			return o, e
+		}
+	}
 	if len(o.Path) < 3 || o.Path[len(o.Path)-2] != collection(m.kind) {
 		return o, errors.New("ID has the wrong object type or collection")
 	}
-	if m.kind == "proxy" && o.Value["handler"] != "reverse_proxy" {
+	if h, ok := handlerNames[m.kind]; ok && o.Value["handler"] != h {
 		return o, errors.New("ID is not a reverse_proxy handler")
 	}
 	parentPath := o.Path[:len(o.Path)-2]
@@ -58,10 +69,10 @@ func lookup(s caddy.Snapshot, m managed) (caddy.Object, error) {
 	if m.parent != "" && pid != m.parent {
 		return o, errors.New("ID belongs to a different parent")
 	}
-	if m.kind == "route" && len(parentPath) != 5 {
+	if m.kind == "route" && len(parentPath) != 5 && parent["handler"] != "subroute" {
 		return o, errors.New("first-release route parent must be an HTTP server")
 	}
-	if m.kind == "proxy" && (len(parentPath) < 2 || parentPath[len(parentPath)-2] != "routes") {
+	if m.kind != "route" && (len(parentPath) < 2 || parentPath[len(parentPath)-2] != "routes") {
 		return o, errors.New("proxy parent must be a route")
 	}
 	return o, nil
@@ -69,11 +80,14 @@ func lookup(s caddy.Snapshot, m managed) (caddy.Object, error) {
 func objectBody(m managed) map[string]any {
 	body := caddy.Clone(m.fields).(map[string]any)
 	body["@id"] = m.id
-	if m.kind == "server" {
+	if m.kind == "server" && body["automatic_https"] == nil {
 		body["automatic_https"] = map[string]any{"disable": true}
 	}
-	if m.kind == "proxy" {
-		body["handler"] = "reverse_proxy"
+	if h, ok := handlerNames[m.kind]; ok {
+		body["handler"] = h
+	}
+	if m.kind == "server" && m.fields["automatic_https"] != nil && m.fields["automatic_https"].(map[string]any)["disable_certificates"] == true {
+		body["tls_connection_policies"] = []any{map[string]any{}}
 	}
 	return body
 }
@@ -104,33 +118,21 @@ func createObject(ctx context.Context, c *caddy.Client, m managed) error {
 		if !errors.Is(e, caddy.ErrNotFound) {
 			return caddy.Decision{}, e
 		}
-		if m.kind == "server" {
-			dest := caddy.Path{"apps", "http", "servers", m.name}
-			v := s.Value
-			for i, key := range dest {
-				obj, ok := v.(map[string]any)
-				if !ok {
-					return caddy.Decision{}, errors.New("server map ancestor is not an object")
-				}
-				next, exists := obj[key]
-				if !exists {
-					var payload any = want
-					for j := len(dest) - 1; j > i; j-- {
-						payload = map[string]any{dest[j]: payload}
-					}
-					return caddy.Decision{Method: "POST", Path: append(caddy.Path{"config"}, dest[:i+1]...), Body: payload}, nil
-				}
-				v = next
-			}
-			return caddy.Decision{}, errors.New("server name already exists; refusing overwrite")
+		if m.kind == "error_pages" {
+			return createErrorPages(s, m, want)
+		}
+		if unordered(m.kind) {
+			return createRootDecision(s, m, want)
 		}
 		parent, e := caddy.Resolve(s, m.parent)
 		if e != nil {
 			return caddy.Decision{}, fmt.Errorf("parent: %w", e)
 		}
 		pkind := "server"
-		if m.kind == "proxy" {
+		if m.kind != "route" {
 			pkind = "route"
+		} else if parent.Value["handler"] == "subroute" {
+			pkind = "subroute"
 		}
 		if _, e = lookup(s, managed{kind: pkind, id: m.parent}); e != nil {
 			return caddy.Decision{}, e
@@ -176,6 +178,13 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 			return caddy.Decision{}, e
 		}
 		desired := caddy.Clone(m.fields).(map[string]any)
+		if m.kind == "server" {
+			if auto, ok := desired["automatic_https"].(map[string]any); ok && auto["disable_certificates"] == true {
+				if policies, ok := o.Value["tls_connection_policies"]; ok {
+					desired["tls_connection_policies"] = caddy.Clone(policies)
+				}
+			}
+		}
 		if raw, ok := desired["upstreams"].([]any); ok {
 			live, _ := o.Value["upstreams"].([]any)
 			merged := make([]any, len(raw))
@@ -213,6 +222,7 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 			}
 			desired["upstreams"] = merged
 		}
+		desired = mergeFields(o.Value, desired, owned, "")
 		intent, _, _ := PlanFields(desired, o.Value, owned)
 		var edits []change
 		for k, v := range intent.Set {
@@ -230,6 +240,12 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 							}
 						}
 					}
+					continue
+				}
+			}
+			if oldMap, ok := old.(map[string]any); ok {
+				if newMap, ok := v.(map[string]any); ok {
+					edits = append(edits, nestedEdits(caddy.Path{k}, oldMap, newMap)...)
 					continue
 				}
 			}
@@ -263,7 +279,7 @@ func updateObject(ctx context.Context, c *caddy.Client, m managed, owned Ownersh
 	if e != nil {
 		return e
 	}
-	if m.kind == "server" {
+	if unordered(m.kind) {
 		return nil
 	}
 	return c.Mutate(ctx, caddy.Path{"config"}, func(s caddy.Snapshot) (caddy.Decision, error) {

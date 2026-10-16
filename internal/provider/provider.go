@@ -68,6 +68,6 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 	resp.ResourceData = c
 }
 func (p *Provider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewHTTPServerResource, NewHTTPRouteResource, NewReverseProxyResource}
+	return []func() resource.Resource{NewHTTPServerResource, NewHTTPRouteResource, NewReverseProxyResource, NewSubrouteResource, NewForwardAuthResource, NewBasicAuthResource, NewErrorResource, NewTLSCertificateResource, NewLogResource, NewErrorPagesResource, NewLogBindingResource, NewHTTPMetricsResource}
 }
 func (p *Provider) DataSources(context.Context) []func() datasource.DataSource { return nil }

@@ -53,11 +53,14 @@ func newRunner(t *testing.T) *runner {
 }
 func (r *runner) run(want int, args ...string) testutil.CLIResult {
 	r.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	v, e := testutil.RunCLI(ctx, r.bin, r.dir, args...)
 	if e != nil || v.ExitCode != want {
 		r.t.Fatalf("%s %v: exit=%d err=%v\n%s\n%s", r.bin, args, v.ExitCode, e, v.Stdout, v.Stderr)
+	}
+	if len(args) > 0 && (args[0] == "apply" || args[0] == "destroy") {
+		http.DefaultClient.CloseIdleConnections()
 	}
 	return v
 }

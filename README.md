@@ -1,8 +1,8 @@
 # Caddy provider for OpenTofu and Terraform
 
-Manage a running Caddy instance through typed resources and its live JSON administration API. The first increment provides HTTP servers, host-matched routes and static reverse-proxy handlers, with in-place updates, partial API writes, UUID identity and ID-based import.
+Manage a running Caddy instance through typed OpenTofu/Terraform resources and its live JSON administration API. Resources support stable UUID identity, in-place updates, selective guarded writes and import by existing Caddy `@id`.
 
-This is the first development increment. TLS serving, authentication, health checks, access logs and error pages follow the [delivery plan](docs/superpowers/plans/2026-10-16-caddy-delivery.md). New servers in this increment explicitly disable automatic HTTPS so host matchers do not unexpectedly initiate certificate issuance. Connections to the admin API support HTTP or verified HTTPS, including custom CA trust and mutual TLS.
+The active-site feature set includes static proxy options and health checks, nested routes, trusted client IPs, forward/basic authentication, existing-file TLS with redirects, access logs, error pages and per-host metrics. See the [49-site example](examples/home/README.md) and [rebuild runbook](docs/migration.md). Inactive named routes and relay remain deferred. New servers default to HTTP; `https = true` enables loaded-certificate serving and redirects while disabling certificate issuance.
 
 ## Caddy prerequisite
 
@@ -52,11 +52,17 @@ The same configuration works with `terraform`. Use one CLI/state owner for an in
 
 ## Resources and lifecycle
 
-- [caddy_http_server](docs/resources/http_server.md): name and listeners.
-- [caddy_http_route](docs/resources/http_route.md): host matchers, flags and relative route order.
-- [caddy_handler_reverse_proxy](docs/resources/handler_reverse_proxy.md): static upstreams and relative handler order.
+- [caddy_http_server](docs/resources/http_server.md): listeners, trusted proxies and HTTPS.
+- [caddy_http_route](docs/resources/http_route.md): typed matchers, parent server/subroute and relative order.
+- [caddy_handler_reverse_proxy](docs/resources/handler_reverse_proxy.md): static upstreams, HTTP/TLS transport, headers, buffers and health.
+- [caddy_handler_subroute](docs/resources/handler_subroute.md): independently managed nested routes.
+- [caddy_handler_forward_auth](docs/resources/handler_forward_auth.md), [caddy_handler_basic_auth](docs/resources/handler_basic_auth.md), [caddy_handler_error](docs/resources/handler_error.md).
+- [caddy_tls_certificate](docs/resources/tls_certificate.md): existing certificate/key files on the Caddy host.
+- [caddy_log](docs/resources/log.md) and [caddy_log_binding](docs/resources/log_binding.md): named destinations and per-host routing.
+- [caddy_error_pages](docs/resources/error_pages.md): fixed root/rewrite/file-server error handling.
+- [caddy_http_metrics](docs/resources/http_metrics.md): singleton per-host observations.
 
-Configuration uses typed HCL attributes/blocks. Optional `object_id` defaults to a UUID v4 generated at creation; `id` exposes the same stable Caddy identifier. Changing content updates the existing resource. Changing an explicit identity, server name or parent replaces it. Omitting a previously explicit identity preserves it.
+Configuration uses typed HCL attributes/blocks. For ID-bearing resources, optional `object_id` defaults to a UUID v4 generated at creation; `id` exposes the same stable Caddy identifier. Changing content updates the existing resource. Changing an explicit identity, server name or parent replaces it. Omitting a previously explicit identity preserves it.
 
 `before_id` and `after_id` are mutually exclusive and refer to siblings. They enforce relative order, not adjacency. Removing the constraint preserves the current position. References should use other resources' `id` values so the CLI can order dependencies and reject reference cycles.
 
@@ -80,7 +86,7 @@ tofu import caddy_http_route.app existing-route-id
 tofu import caddy_handler_reverse_proxy.app existing-proxy-id
 ```
 
-Parents must have IDs. Import does not adopt children automatically. Only the current typed shapes are supported; unsupported matcher structures fail with a diagnostic. Objects without IDs cannot be imported.
+Parents must have IDs. Import does not adopt children automatically. Only the current typed shapes are supported; unsupported matcher structures fail with a diagnostic. Objects without IDs cannot be imported. Hostname log bindings and metrics expose provider state identities and have no importer.
 
 Optional settings are observed at import and become managed when configured. The computed `configuration_revision` records field ownership without exposing settings or secrets. The first apply after importing a route with configured optional settings can show a state-only metadata update; it performs no Caddy write if live values already match. Subsequent plans are empty. `order_satisfied` exposes whether a configured sibling order needs repair.
 

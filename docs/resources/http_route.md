@@ -27,3 +27,5 @@ resource "caddy_http_route" "app" {
 ```
 
 For an overlapping fallback route, set `before_id = caddy_http_route.fallback.id` on the more specific route. For the reverse relationship use `after_id`. An existing satisfied constraint does not force adjacency, and a move retains the route ID and handlers.
+
+Routes accept exactly one of `server_id` or `subroute_id`. Changing either parent replaces the route. `match` supports `hosts`, `paths`, `methods`, `client_ip_ranges` and a single nonrecursive `not` list using the same four conditions. Sets in `match` are ORed; conditions within a set are ANDed. Negation follows Caddy's matcher-set semantics. Example: `match = [{methods = ["POST", "PUT", "DELETE"], not = [{client_ip_ranges = ["10.0.0.0/8"]}]}]` denies writes from clients outside the range. Client IP uses Caddy's actual trusted-proxy handling, not a direct header comparison.

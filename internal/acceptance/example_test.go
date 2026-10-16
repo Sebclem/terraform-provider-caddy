@@ -32,7 +32,7 @@ func TestAccShippedExample(t *testing.T) {
 	providers := schema["provider_schemas"].(map[string]any)
 	for _, raw := range providers {
 		resources := raw.(map[string]any)["resource_schemas"].(map[string]any)
-		if len(resources) != 3 {
+		if len(resources) != 12 {
 			t.Fatal("unexpected resource surface")
 		}
 		for _, rs := range resources {

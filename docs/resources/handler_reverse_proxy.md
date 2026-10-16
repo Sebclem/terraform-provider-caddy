@@ -24,3 +24,15 @@ resource "caddy_handler_reverse_proxy" "app" {
   }
 }
 ```
+
+Optional typed settings:
+
+| Attribute | Shape |
+| --- | --- |
+| `transport` | `{tls = bool, insecure_skip_verify = bool, server_name = string}`; HTTP transport only. Verification bypass requires explicitly enabling TLS. |
+| `request_headers` | `{set = map(list(string)), add = map(list(string)), delete = list(string)}` |
+| `request_buffers`, `response_buffers` | Nonnegative integer bytes; legacy 35MiB is 36700160. |
+| `flush_interval` | Go duration string; negative `"-1ns"` flushes immediately. |
+| `health` | `{uri = string, follow_redirects = bool, fails = number, timeout = string}`; positive timeout. |
+
+Omitted nested options are not global defaults. A timeout-only change writes the nested timeout field and retains unrelated active-health/transport fields. Headers support native Caddy placeholders, e.g. `Host = ["{http.request.hostport}"]`. A hostname in a static upstream dial is allowed; dynamic upstream modules are unsupported.

@@ -113,6 +113,9 @@ func (r *caddyResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	if r.kind == "route" && !m.SubParent.IsNull() {
+		m.Parent = m.SubParent
+	}
 	if e := deleteObject(ctx, r.client, managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: m.Parent.ValueString()}); e != nil {
 		resp.Diagnostics.AddError("Caddy deletion failed", e.Error())
 	}
@@ -138,6 +141,18 @@ func (r *caddyResource) ImportState(ctx context.Context, req resource.ImportStat
 	}
 	if r.kind == "proxy" {
 		owned["upstreams"] = true
+	}
+	for k, f := range fields(r.kind) {
+		if f.attribute.IsRequired() {
+			owned[nativeKey(k, f)] = true
+			markLeaves(owned, nativeKey(k, f), encodeField(r.kind, k, nativeValue(m.Extra[k])))
+		}
+	}
+	if r.kind == "forward_auth" {
+		owned["headers"] = true
+	}
+	if r.kind == "error_pages" {
+		owned = Ownership{"handle": true}
 	}
 	m.Revision = types.StringValue(ownershipRevision(owned))
 	resp.Diagnostics.Append(r.setModel(ctx, &resp.State, m)...)

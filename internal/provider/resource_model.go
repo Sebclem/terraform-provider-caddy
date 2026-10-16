@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"git.sebclem.fr/sebclem/terraform-provider-caddy/internal/caddy"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"reflect"
 )
 
 type getter interface {
@@ -18,30 +20,38 @@ type setter interface {
 }
 type model struct {
 	ID, ObjectID, Name, Parent, Group, Before, After, Revision types.String
+	SubParent                                                  types.String
+	Extra                                                      map[string]attr.Value
 	Listen, Match, Upstream                                    types.List
 	Terminal, Order                                            types.Bool
-}
-type matcher struct {
-	Hosts types.List `tfsdk:"hosts"`
 }
 type upstream struct {
 	Dial types.String `tfsdk:"dial"`
 }
 
-var matchTypes = map[string]attr.Type{"hosts": types.ListType{ElemType: types.StringType}}
 var upstreamTypes = map[string]attr.Type{"dial": types.StringType}
 
-func (r *caddyResource) readModel(ctx context.Context, g getter) (model, diag.Diagnostics) {
-	m := model{}
-	var d diag.Diagnostics
+func (r *caddyResource) modelFields(m *model) map[string]any {
 	fields := map[string]any{"id": &m.ID, "object_id": &m.ObjectID, "configuration_revision": &m.Revision}
+	if r.kind == "error_pages" {
+		fields["subroute_id"] = &m.Parent
+		return fields
+	}
+	if r.kind == "certificate" {
+		return fields
+	}
+	if r.kind == "log" {
+		fields["name"] = &m.Name
+		return fields
+	}
 	if r.kind == "server" {
 		fields["name"] = &m.Name
 		fields["listen"] = &m.Listen
 	} else {
-		p := "server_id"
-		if r.kind == "proxy" {
-			p = "route_id"
+		p := "route_id"
+		if r.kind == "route" {
+			p = "server_id"
+			fields["subroute_id"] = &m.SubParent
 		}
 		fields[p] = &m.Parent
 		fields["before_id"] = &m.Before
@@ -51,40 +61,32 @@ func (r *caddyResource) readModel(ctx context.Context, g getter) (model, diag.Di
 			fields["match"] = &m.Match
 			fields["terminal"] = &m.Terminal
 			fields["group"] = &m.Group
-		} else {
+		}
+		if r.kind == "proxy" {
 			fields["upstream"] = &m.Upstream
 		}
 	}
-	for k, v := range fields {
+	return fields
+}
+func (r *caddyResource) readModel(ctx context.Context, g getter) (model, diag.Diagnostics) {
+	m := model{Extra: map[string]attr.Value{}}
+	var d diag.Diagnostics
+	for k, v := range r.modelFields(&m) {
 		d.Append(g.GetAttribute(ctx, path.Root(k), v)...)
+	}
+	for k := range fields(r.kind) {
+		var v attr.Value
+		d.Append(g.GetAttribute(ctx, path.Root(k), &v)...)
+		m.Extra[k] = v
 	}
 	return m, d
 }
-
 func (r *caddyResource) setModel(ctx context.Context, s setter, m model) diag.Diagnostics {
 	var d diag.Diagnostics
-	fields := map[string]any{"id": m.ID, "object_id": m.ObjectID, "configuration_revision": m.Revision}
-	if r.kind == "server" {
-		fields["name"] = m.Name
-		fields["listen"] = m.Listen
-	} else {
-		p := "server_id"
-		if r.kind == "proxy" {
-			p = "route_id"
-		}
-		fields[p] = m.Parent
-		fields["before_id"] = m.Before
-		fields["after_id"] = m.After
-		fields["order_satisfied"] = m.Order
-		if r.kind == "route" {
-			fields["match"] = m.Match
-			fields["terminal"] = m.Terminal
-			fields["group"] = m.Group
-		} else {
-			fields["upstream"] = m.Upstream
-		}
+	for k, v := range r.modelFields(&m) {
+		d.Append(s.SetAttribute(ctx, path.Root(k), v)...)
 	}
-	for k, v := range fields {
+	for k, v := range m.Extra {
 		d.Append(s.SetAttribute(ctx, path.Root(k), v)...)
 	}
 	return d
@@ -92,11 +94,30 @@ func (r *caddyResource) setModel(ctx context.Context, s setter, m model) diag.Di
 
 func (r *caddyResource) configOwnership(ctx context.Context, g getter) Ownership {
 	out := Ownership{}
+	if r.kind == "error_pages" {
+		return Ownership{"handle": true}
+	}
+	for k, f := range fields(r.kind) {
+		var v attr.Value
+		g.GetAttribute(ctx, path.Root(k), &v)
+		if v != nil && !v.IsNull() {
+			out[nativeKey(k, f)] = true
+			if k == "https" {
+				out["tls_connection_policies"] = true
+				out["automatic_https.disable"] = true
+				out["automatic_https.disable_certificates"] = true
+			}
+			markLeaves(out, nativeKey(k, f), encodeField(r.kind, k, nativeValue(v)))
+		}
+	}
+	if r.kind == "forward_auth" {
+		out["headers"] = true
+	}
 	if r.kind == "server" {
 		out["listen"] = true
 	} else if r.kind == "proxy" {
 		out["upstreams"] = true
-	} else {
+	} else if r.kind == "route" {
 		var match types.List
 		var terminal types.Bool
 		var group types.String
@@ -119,6 +140,27 @@ func (r *caddyResource) configOwnership(ctx context.Context, g getter) Ownership
 func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (managed, diag.Diagnostics) {
 	v := managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: m.Parent.ValueString(), fields: map[string]any{}, position: caddy.Position{BeforeID: m.Before.ValueString(), AfterID: m.After.ValueString()}}
 	var d diag.Diagnostics
+	if r.kind == "route" && !m.SubParent.IsNull() {
+		v.parent = m.SubParent.ValueString()
+	}
+	for k, f := range fields(r.kind) {
+		if owned[nativeKey(k, f)] {
+			v.fields[nativeKey(k, f)] = encodeField(r.kind, k, nativeValue(m.Extra[k]))
+		}
+	}
+	if r.kind == "server" && owned["automatic_https"] {
+		if m.Extra["https"] != nil && nativeValue(m.Extra["https"]) == true {
+			v.fields["tls_connection_policies"] = []any{map[string]any{}}
+		} else {
+			v.fields["automatic_https"] = map[string]any{"disable": true}
+		}
+	}
+	if r.kind == "error_pages" {
+		v.fields = errorPagesFields(v.id, nativeValue(m.Extra["root"]), nativeValue(m.Extra["page_uri"]))
+	}
+	if r.kind == "forward_auth" {
+		v.fields = forwardAuthFields(m.Extra)
+	}
 	if r.kind == "server" {
 		var a []string
 		d.Append(m.Listen.ElementsAs(ctx, &a, false)...)
@@ -135,7 +177,7 @@ func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (
 			out[i] = map[string]any{"dial": u.Dial.ValueString()}
 		}
 		v.fields["upstreams"] = out
-	} else {
+	} else if r.kind == "route" {
 		if owned["terminal"] {
 			v.fields["terminal"] = m.Terminal.ValueBool()
 		}
@@ -143,17 +185,9 @@ func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (
 			v.fields["group"] = m.Group.ValueString()
 		}
 		if owned["match"] {
-			var a []matcher
-			d.Append(m.Match.ElementsAs(ctx, &a, false)...)
-			out := make([]any, len(a))
-			for i, x := range a {
-				var hosts []string
-				d.Append(x.Hosts.ElementsAs(ctx, &hosts, false)...)
-				h := make([]any, len(hosts))
-				for j, s := range hosts {
-					h[j] = s
-				}
-				out[i] = map[string]any{"host": h}
+			out, e := encodeMatchers(nativeValue(m.Match))
+			if e != nil {
+				d.AddError("Invalid matchers", e.Error())
 			}
 			v.fields["match"] = out
 		}
@@ -162,11 +196,49 @@ func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (
 }
 
 func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (model, error) {
-	o, e := lookup(s, managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: m.Parent.ValueString()})
+	parentID := m.Parent.ValueString()
+	if r.kind == "route" && !m.SubParent.IsNull() {
+		parentID = m.SubParent.ValueString()
+	}
+	o, e := lookup(s, managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: parentID})
 	if e != nil {
 		return m, e
 	}
 	m.ObjectID = m.ID
+	previousExtra := m.Extra
+	m.Extra = map[string]attr.Value{}
+	for k, f := range fields(r.kind) {
+		raw, err := observedField(r.kind, k, o.Value)
+		if err != nil {
+			return m, err
+		}
+		v, err := typedValue(ctx, f.attribute.GetType(), raw)
+		if err != nil {
+			return m, fmt.Errorf("%s: %w", k, err)
+		}
+		if previous := previousExtra[k]; previous != nil && !previous.IsNull() && fullyKnown(previous) && r.kind != "forward_auth" && r.kind != "error_pages" {
+			raw := encodeField(r.kind, k, nativeValue(previous))
+			if reflect.DeepEqual(caddy.Clone(raw), o.Value[nativeKey(k, f)]) {
+				v = previous
+			}
+		}
+		m.Extra[k] = v
+	}
+	if r.kind == "error_pages" {
+		p, e := caddy.At(s.Value, o.Path[len(s.Path):len(o.Path)-3])
+		if e != nil {
+			return m, e
+		}
+		m.Parent = types.StringValue(p.(map[string]any)["@id"].(string))
+		return m, nil
+	}
+	if r.kind == "certificate" {
+		return m, nil
+	}
+	if r.kind == "log" {
+		m.Name = types.StringValue(o.Path[len(o.Path)-1])
+		return m, nil
+	}
 	if r.kind == "server" {
 		m.Name = types.StringValue(o.Path[len(o.Path)-1])
 		m.Listen, e = stringsList(o.Value["listen"])
@@ -175,6 +247,11 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 	p, _ := caddy.At(s.Value, o.Path[len(s.Path):len(o.Path)-2])
 	parent := p.(map[string]any)
 	m.Parent = types.StringValue(parent["@id"].(string))
+	m.SubParent = types.StringNull()
+	if r.kind == "route" && parent["handler"] == "subroute" {
+		m.SubParent = m.Parent
+		m.Parent = types.StringNull()
+	}
 	a, _ := caddy.At(s.Value, o.ParentPath[len(s.Path):])
 	array, _ := a.([]any)
 	ok, e := caddy.OrderSatisfied(array, m.ID.ValueString(), caddy.Position{BeforeID: m.Before.ValueString(), AfterID: m.After.ValueString()})
@@ -204,7 +281,7 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 			vals[i] = types.ObjectValueMust(upstreamTypes, map[string]attr.Value{"dial": types.StringValue(dial)})
 		}
 		m.Upstream = types.ListValueMust(types.ObjectType{AttrTypes: upstreamTypes}, vals)
-	} else {
+	} else if r.kind == "route" {
 		terminal, exists := o.Value["terminal"]
 		if exists {
 			b, ok := terminal.(bool)
@@ -223,25 +300,19 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 			}
 			m.Group = types.StringValue(str)
 		}
-		vals := []attr.Value{}
-		if raw, exists := o.Value["match"]; exists {
-			sets, ok := raw.([]any)
-			if !ok {
-				return m, errors.New("unsupported matcher shape")
-			}
-			for _, set := range sets {
-				obj, ok := set.(map[string]any)
-				if !ok || len(obj) != 1 {
-					return m, errors.New("first release can only represent host-only matcher sets")
-				}
-				hosts, e := stringsList(obj["host"])
-				if e != nil {
-					return m, errors.New("first release can only represent host-only matcher sets")
-				}
-				vals = append(vals, types.ObjectValueMust(matchTypes, map[string]attr.Value{"hosts": hosts}))
-			}
+		raw := o.Value["match"]
+		if raw == nil {
+			raw = []any{}
 		}
-		m.Match = types.ListValueMust(types.ObjectType{AttrTypes: matchTypes}, vals)
+		decoded, err := decodeMatchers(raw)
+		if err != nil {
+			return m, err
+		}
+		v, err := typedValue(ctx, types.ListType{ElemType: types.ObjectType{AttrTypes: matchTypes}}, decoded)
+		if err != nil {
+			return m, err
+		}
+		m.Match = v.(types.List)
 	}
 	return m, nil
 }

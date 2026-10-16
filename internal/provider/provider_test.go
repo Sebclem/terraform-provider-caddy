@@ -23,7 +23,7 @@ func TestProviderSchema(t *testing.T) {
 	}
 }
 func TestResourceRegistration(t *testing.T) {
-	if got := len(New("test")().Resources(context.Background())); got != 3 {
-		t.Fatalf("registered %d resources, want 3", got)
+	if got := len(New("test")().Resources(context.Background())); got != 12 {
+		t.Fatalf("registered %d resources, want 12", got)
 	}
 }

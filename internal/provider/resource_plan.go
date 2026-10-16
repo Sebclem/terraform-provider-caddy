@@ -19,16 +19,26 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 	replacing := false
 	if !creating {
 		key := "name"
-		if r.kind == "route" {
+		if r.kind == "error_pages" {
+			key = "subroute_id"
+		} else if r.kind == "route" {
 			key = "server_id"
 		}
-		if r.kind == "proxy" {
+		if !unordered(r.kind) && r.kind != "route" {
 			key = "route_id"
 		}
 		var previous, planned types.String
-		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(key), &previous)...)
-		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(key), &planned)...)
-		replacing = !previous.Equal(planned)
+		if r.kind != "certificate" {
+			resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(key), &previous)...)
+			resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(key), &planned)...)
+			replacing = !previous.Equal(planned)
+		}
+		if r.kind == "route" {
+			var a, b types.String
+			req.State.GetAttribute(ctx, path.Root("subroute_id"), &a)
+			req.Plan.GetAttribute(ctx, path.Root("subroute_id"), &b)
+			replacing = replacing || !a.Equal(b)
+		}
 		if !explicit.IsNull() && !explicit.IsUnknown() {
 			var priorID types.String
 			resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &priorID)...)
@@ -52,8 +62,26 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("object_id"), old)...)
 		}
 	}
-	if r.kind != "server" {
+	if !unordered(r.kind) {
 		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("order_satisfied"), types.BoolValue(true))...)
+	}
+	for k, f := range fields(r.kind) {
+		var cfg attr.Value
+		resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root(k), &cfg)...)
+		if cfg == nil || !cfg.IsNull() {
+			continue
+		}
+		v, _ := typedValue(ctx, f.attribute.GetType(), nil)
+		if k == "https" {
+			v = types.BoolValue(false)
+		}
+		if k == "copy_headers" {
+			v = types.ListValueMust(types.StringType, []attr.Value{})
+		}
+		if !req.State.Raw.IsNull() && !ownedFields(ctx, req.Private)[nativeKey(k, f)] {
+			resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(k), &v)...)
+		}
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root(k), v)...)
 	}
 	if r.kind != "route" {
 		return
