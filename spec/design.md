@@ -164,7 +164,7 @@ Import accepts only the existing object's Caddy `@id`. Resources whose Caddy loc
 
 Read the object, verify its type and discover its server name or parent ID. For child resources, the immediate parent must also have an ID so the typed parent reference can be represented; otherwise reject import with a clear diagnostic. Importing a parent does not import its children.
 
-Populate typed state from live values and retain the existing ID. Optional settings start observed, without claiming previously unmanaged fields solely through import. Subsequent configuration establishes field ownership. Required attributes must match the imported object for a no-change plan. Refresh and import never mutate the instance.
+Populate typed state from live values and retain the existing ID. Optional settings start observed, without claiming previously unmanaged fields solely through import. Subsequent configuration establishes field ownership. Required attributes must match the imported object. A computed `configuration_revision` records the last applied field ownership: an imported route with configured optional settings may need one state-only apply to adopt those settings before a no-change plan. Matching live values cause no API writes during this adoption. Required-only imports already yield a no-change plan. Refresh and import never mutate the instance.
 
 ## Validation and compatibility
 
