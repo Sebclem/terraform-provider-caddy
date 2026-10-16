@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.repository == 'sebclem/opentofu-provider-caddy'
+    if: github.repository == 'sebclem/terraform-provider-caddy'
     runs-on: ubuntu-latest
     steps:
       - name: Check out full history

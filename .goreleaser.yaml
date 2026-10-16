@@ -61,7 +61,7 @@ signs:
 release:
   github:
     owner: sebclem
-    name: opentofu-provider-caddy
+    name: terraform-provider-caddy
   draft: false
   prerelease: auto
   extra_files:
