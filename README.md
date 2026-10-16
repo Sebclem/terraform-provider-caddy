@@ -59,7 +59,7 @@ The same configuration works with `terraform`. Use one CLI/state owner for an in
 - [caddy_handler_forward_auth](docs/resources/handler_forward_auth.md), [caddy_handler_basic_auth](docs/resources/handler_basic_auth.md), [caddy_handler_error](docs/resources/handler_error.md).
 - [caddy_tls_certificate](docs/resources/tls_certificate.md): existing certificate/key files on the Caddy host.
 - [caddy_log](docs/resources/log.md) and [caddy_log_binding](docs/resources/log_binding.md): named destinations and per-host routing.
-- [caddy_error_pages](docs/resources/error_pages.md): fixed root/rewrite/file-server error handling.
+- [caddy_error_pages](docs/resources/error_pages.md): shared server-level or per-subroute root/rewrite/file-server error handling.
 - [caddy_http_metrics](docs/resources/http_metrics.md): singleton per-host observations.
 
 Configuration uses typed HCL attributes/blocks. For ID-bearing resources, optional `object_id` defaults to a UUID v4 generated at creation; `id` exposes the same stable Caddy identifier. Changing content updates the existing resource. Changing an explicit identity, server name or parent replaces it. Omitting a previously explicit identity preserves it.

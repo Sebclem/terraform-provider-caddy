@@ -28,7 +28,8 @@ func (r *caddyResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 	blocks := map[string]schema.Block{}
 	if r.kind == "certificate" {
 	} else if r.kind == "error_pages" {
-		a["subroute_id"] = schema.StringAttribute{Required: true, PlanModifiers: replace}
+		a["server_id"] = schema.StringAttribute{Optional: true, PlanModifiers: replace, Description: "Parent HTTP server ID; exactly one of server_id or subroute_id."}
+		a["subroute_id"] = schema.StringAttribute{Optional: true, PlanModifiers: replace, Description: "Parent subroute ID; exactly one of server_id or subroute_id."}
 	} else if r.kind == "log" {
 		a["name"] = schema.StringAttribute{Required: true, PlanModifiers: replace}
 	} else if r.kind == "server" {
@@ -76,6 +77,9 @@ func (r *caddyResource) ValidateConfig(ctx context.Context, req resource.Validat
 	if !id.IsNull() && !id.IsUnknown() && (id.ValueString() == "" || strings.ContainsAny(id.ValueString(), "/\\") || id.ValueString() == "." || id.ValueString() == "..") {
 		resp.Diagnostics.AddError("Invalid object ID", "Use a nonempty ID without slashes or dot path segments.")
 	}
+	if r.kind == "error_pages" {
+		validateParent(ctx, req, resp, "Invalid error-page parent")
+	}
 	if r.kind == "error_pages" || r.kind == "certificate" || r.kind == "log" {
 		validateExtra(ctx, r, req.Config, &resp.Diagnostics)
 		return
@@ -120,12 +124,21 @@ func (r *caddyResource) ValidateConfig(ctx context.Context, req resource.Validat
 		}
 	}
 	if r.kind == "route" {
-		var parent, sub types.String
-		req.Config.GetAttribute(ctx, path.Root("server_id"), &parent)
-		req.Config.GetAttribute(ctx, path.Root("subroute_id"), &sub)
-		if parent.IsNull() == sub.IsNull() {
-			resp.Diagnostics.AddError("Invalid route parent", "Configure exactly one of server_id and subroute_id.")
-		}
+		validateParent(ctx, req, resp, "Invalid route parent")
 	}
 	validateExtra(ctx, r, req.Config, &resp.Diagnostics)
+}
+
+func validateParent(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse, summary string) {
+	var parent, sub types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("server_id"), &parent)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("subroute_id"), &sub)...)
+	if parent.IsNull() == sub.IsNull() {
+		resp.Diagnostics.AddError(summary, "Configure exactly one of server_id and subroute_id.")
+	}
+	for _, value := range []types.String{parent, sub} {
+		if !value.IsNull() && !value.IsUnknown() && strings.TrimSpace(value.ValueString()) == "" {
+			resp.Diagnostics.AddError(summary, "Parent ID must not be empty.")
+		}
+	}
 }

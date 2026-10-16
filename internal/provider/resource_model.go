@@ -34,7 +34,8 @@ var upstreamTypes = map[string]attr.Type{"dial": types.StringType}
 func (r *caddyResource) modelFields(m *model) map[string]any {
 	fields := map[string]any{"id": &m.ID, "object_id": &m.ObjectID, "configuration_revision": &m.Revision}
 	if r.kind == "error_pages" {
-		fields["subroute_id"] = &m.Parent
+		fields["server_id"] = &m.Parent
+		fields["subroute_id"] = &m.SubParent
 		return fields
 	}
 	if r.kind == "certificate" {
@@ -140,7 +141,7 @@ func (r *caddyResource) configOwnership(ctx context.Context, g getter) Ownership
 func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (managed, diag.Diagnostics) {
 	v := managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: m.Parent.ValueString(), fields: map[string]any{}, position: caddy.Position{BeforeID: m.Before.ValueString(), AfterID: m.After.ValueString()}}
 	var d diag.Diagnostics
-	if r.kind == "route" && !m.SubParent.IsNull() {
+	if (r.kind == "route" || r.kind == "error_pages") && !m.SubParent.IsNull() {
 		v.parent = m.SubParent.ValueString()
 	}
 	for k, f := range fields(r.kind) {
@@ -156,6 +157,10 @@ func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (
 		}
 	}
 	if r.kind == "error_pages" {
+		v.parentKind = "server"
+		if !m.SubParent.IsNull() {
+			v.parentKind = "subroute"
+		}
 		v.fields = errorPagesFields(v.id, nativeValue(m.Extra["root"]), nativeValue(m.Extra["page_uri"]))
 	}
 	if r.kind == "forward_auth" {
@@ -197,7 +202,7 @@ func (r *caddyResource) managed(ctx context.Context, m model, owned Ownership) (
 
 func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (model, error) {
 	parentID := m.Parent.ValueString()
-	if r.kind == "route" && !m.SubParent.IsNull() {
+	if (r.kind == "route" || r.kind == "error_pages") && !m.SubParent.IsNull() {
 		parentID = m.SubParent.ValueString()
 	}
 	o, e := lookup(s, managed{kind: r.kind, id: m.ID.ValueString(), name: m.Name.ValueString(), parent: parentID})
@@ -237,7 +242,13 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 		if e != nil {
 			return m, e
 		}
-		m.Parent = types.StringValue(p.(map[string]any)["@id"].(string))
+		parent := p.(map[string]any)
+		m.Parent = types.StringValue(parent["@id"].(string))
+		m.SubParent = types.StringNull()
+		if parent["handler"] == "subroute" {
+			m.SubParent = m.Parent
+			m.Parent = types.StringNull()
+		}
 		return m, nil
 	}
 	if r.kind == "certificate" {

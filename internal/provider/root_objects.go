@@ -79,24 +79,44 @@ func lookupErrorPages(s caddy.Snapshot, m managed, o caddy.Object) (caddy.Object
 		return o, e
 	}
 	parent, ok := raw.(map[string]any)
-	if !ok || parent["handler"] != "subroute" {
-		return o, errors.New("error-page parent must be a subroute")
+	if !ok {
+		return o, errors.New("error-page parent must be an HTTP server or subroute")
 	}
 	id, _ := parent["@id"].(string)
 	if id == "" || (m.parent != "" && id != m.parent) {
 		return o, errors.New("invalid error-page parent ID")
 	}
 
+	if _, e := errorPagesParent(s, id, m.parentKind); e != nil {
+		return o, e
+	}
 	return o, nil
 }
+
+// Infer the parent on import, while checking the configured parent type on create.
+func errorPagesParent(s caddy.Snapshot, id, expected string) (caddy.Object, error) {
+	parent, err := caddy.Resolve(s, id)
+	if err != nil {
+		return parent, err
+	}
+	kind := "server"
+	if parent.Value["handler"] == "subroute" {
+		kind = "subroute"
+	}
+	if expected != "" && expected != kind {
+		return parent, errors.New("error-page parent type does not match server_id or subroute_id")
+	}
+	return lookup(s, managed{kind: kind, id: id})
+}
+
 func createErrorPages(s caddy.Snapshot, m managed, want map[string]any) (caddy.Decision, error) {
-	parent, e := lookup(s, managed{kind: "subroute", id: m.parent})
+	parent, e := errorPagesParent(s, m.parent, m.parentKind)
 	if e != nil {
 		return caddy.Decision{}, e
 	}
 	if a, e := caddy.At(parent.Value, []string{"errors", "routes"}); e == nil {
 		if arr, ok := a.([]any); !ok || len(arr) != 0 {
-			return caddy.Decision{}, errors.New("subroute already has error routes; refusing duplicate ownership")
+			return caddy.Decision{}, errors.New("parent already has error routes; refusing duplicate ownership")
 		}
 	}
 	return settingDecision(s, append(append(caddy.Path(nil), parent.Path...), "errors", "routes"), []any{want})

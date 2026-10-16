@@ -27,9 +27,7 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 	replacing := false
 	if !creating {
 		key := "name"
-		if r.kind == "error_pages" {
-			key = "subroute_id"
-		} else if r.kind == "route" {
+		if r.kind == "error_pages" || r.kind == "route" {
 			key = "server_id"
 		}
 		if !unordered(r.kind) && r.kind != "route" {
@@ -41,7 +39,7 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 			resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(key), &planned)...)
 			replacing = !previous.Equal(planned)
 		}
-		if r.kind == "route" {
+		if r.kind == "route" || r.kind == "error_pages" {
 			var a, b types.String
 			req.State.GetAttribute(ctx, path.Root("subroute_id"), &a)
 			req.Plan.GetAttribute(ctx, path.Root("subroute_id"), &b)

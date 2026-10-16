@@ -13,6 +13,12 @@ import (
 )
 
 func TestAccLogsAndErrorPages(t *testing.T) {
+	for _, parent := range []string{"subroute", "server"} {
+		t.Run(parent, func(t *testing.T) { testLogsAndErrorPages(t, parent) })
+	}
+}
+
+func testLogsAndErrorPages(t *testing.T, parent string) {
 	r := newRunner(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "403.html"), []byte("denied-page"), 0644)
@@ -52,8 +58,21 @@ resource "caddy_handler_error" "deny" {
  message = "Unauthorized"
 }
 `, logPath, r.port, dir)
+	if parent == "server" {
+		cfg = strings.Replace(cfg, "subroute_id = caddy_handler_subroute.app.id\n root =", "server_id = caddy_http_server.main.id\n root =", 1)
+	}
 	r.write(cfg)
 	r.run(0, "init", "-input=false", "-no-color")
+	if parent == "server" {
+		for _, declaration := range []string{"", "server_id = caddy_http_server.main.id\n subroute_id = caddy_handler_subroute.app.id", `server_id = " "`} {
+			r.write(strings.Replace(cfg, "server_id = caddy_http_server.main.id\n root =", declaration+"\n root =", 1))
+			result := r.run(1, "validate", "-no-color")
+			if !strings.Contains(result.Stdout+result.Stderr, "Invalid error-page parent") {
+				t.Fatal("missing parent validation diagnostic")
+			}
+		}
+		r.write(cfg)
+	}
 	r.run(0, "apply", "-auto-approve", "-input=false", "-no-color")
 	q, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/", r.port), nil)
 	q.Host = "app.test"
@@ -111,6 +130,21 @@ resource "caddy_handler_error" "deny" {
 	}
 	if r.values()["caddy_error_pages.app"]["id"] != id {
 		t.Fatal("error-page ID changed")
+	}
+	if parent == "server" {
+		// Moving ownership to another parent replaces the error route only.
+		serverID := r.values()["caddy_http_server.main"]["id"]
+		r.write(strings.Replace(cfg, "server_id = caddy_http_server.main.id\n root =", "subroute_id = caddy_handler_subroute.app.id\n root =", 1))
+		r.run(0, "apply", "-auto-approve", "-input=false", "-no-color")
+		if r.values()["caddy_error_pages.app"]["id"] == id {
+			t.Fatal("parent change retained error-page ID")
+		}
+		if r.values()["caddy_http_server.main"]["id"] != serverID {
+			t.Fatal("parent change replaced HTTP server")
+		}
+		r.f.ResetRequests()
+		r.run(0, "plan", "-detailed-exitcode", "-input=false", "-no-color")
+		r.noWrites()
 	}
 	r.run(0, "destroy", "-auto-approve", "-input=false", "-no-color")
 }

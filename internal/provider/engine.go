@@ -11,9 +11,9 @@ import (
 )
 
 type managed struct {
-	kind, id, name, parent string
-	fields                 map[string]any
-	position               caddy.Position
+	kind, id, name, parent, parentKind string
+	fields                             map[string]any
+	position                           caddy.Position
 }
 
 func collection(kind string) string {
