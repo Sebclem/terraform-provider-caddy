@@ -41,8 +41,8 @@ The first release already has an executable task plan. Later sections below spec
 
 ## Increment 1: First working release
 
-- [ ] Execute [First Release Implementation Plan](2026-10-16-caddy-first-release.md), Tasks 1–10.
-- [ ] Require real proxy traffic, in-place/selective edits, import, ordering, subtree deletion and zero-write second applies with both CLIs.
+- [x] Execute [First Release Implementation Plan](2026-10-16-caddy-first-release.md), Tasks 1–10.
+- [x] Require real proxy traffic, in-place/selective edits, import, ordering, subtree deletion and zero-write second applies with both CLIs.
 
 ## Increment 2: Proxy settings, routing and authentication
 

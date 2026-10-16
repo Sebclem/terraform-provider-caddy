@@ -11,7 +11,7 @@ CADDY_BIN=/absolute/path/to/caddy IAC_BIN=/absolute/path/to/tofu make test-accep
 CADDY_BIN=/absolute/path/to/caddy IAC_BIN=/absolute/path/to/terraform make test-acceptance
 ```
 
-The target builds the provider, creates a temporary filesystem mirror and CLI configuration, and uses loopback Caddy instances and synthetic upstreams. Tests cover init/validate, ordinary and refresh-only apply, plan JSON actions, stable UUIDs, explicit-ID replacement, read-only imports, optional-field ownership/removal, route/handler movement and drift, subtree deletion, rejected writes, endpoint errors and dropped responses after committed creates. A second apply must make no API mutations.
+The target builds the provider, creates a temporary filesystem mirror and CLI configuration, and uses loopback Caddy instances and synthetic upstreams. Tests cover init/validate, ordinary and refresh-only apply, plan JSON actions, stable UUIDs, explicit-ID replacement, read-only imports, optional-field ownership/removal, route/handler movement and drift, subtree deletion, rejected writes, endpoint errors and dropped responses after committed creates. Review regressions additionally cover explicit-ID parent replacements, missing anchors, cancellation after commitment and duplicate desired upstream addresses. A second apply must make no API mutations.
 
 The HTTP/API suite additionally covers HTTP/verified HTTPS, custom trust, mutual TLS, context deadlines, ETag collisions, ID resolution, preservation of large JSON numbers and a live ID/reorder race. Caddy checksums use SHA512; OpenTofu uses SHA256. See tools/README.md before obtaining tools.
 

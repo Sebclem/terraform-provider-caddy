@@ -15,10 +15,37 @@ func (r *caddyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanR
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("configuration_revision"), types.StringValue(ownershipRevision(r.configOwnership(ctx, req.Config))))...)
 	var explicit types.String
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("object_id"), &explicit)...)
-	if !explicit.IsUnknown() {
+	creating := req.State.Raw.IsNull()
+	replacing := false
+	if !creating {
+		key := "name"
+		if r.kind == "route" {
+			key = "server_id"
+		}
+		if r.kind == "proxy" {
+			key = "route_id"
+		}
+		var previous, planned types.String
+		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root(key), &previous)...)
+		resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root(key), &planned)...)
+		replacing = !previous.Equal(planned)
+		if !explicit.IsNull() && !explicit.IsUnknown() {
+			var priorID types.String
+			resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &priorID)...)
+			replacing = replacing || !explicit.Equal(priorID)
+		}
+	}
+	// Computed IDs must remain unknown for creation/replacement, even with
+	// explicit object_id, so references invalidate descendants in the same plan.
+	if creating || replacing {
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown())...)
+		if explicit.IsNull() {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("object_id"), types.StringUnknown())...)
+		}
+	} else if !explicit.IsUnknown() {
 		if !explicit.IsNull() {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), explicit)...)
-		} else if !req.State.Raw.IsNull() {
+		} else {
 			var old types.String
 			resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("id"), &old)...)
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), old)...)

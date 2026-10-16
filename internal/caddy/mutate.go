@@ -47,6 +47,9 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 		snap.AfterWrite = afterWrite
 		decision, err := f(snap)
 		if err != nil {
+			if afterWrite {
+				return fmt.Errorf("%w: %w", ErrUncertainWrite, err)
+			}
 			return err
 		}
 		if decision.Done {
@@ -56,7 +59,7 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 			return errors.New("Caddy did not return ETag; conditional writes are required")
 		}
 		if verifiedWrite {
-			return errors.New("Caddy readback differs from the requested configuration")
+			return fmt.Errorf("%w: Caddy readback differs from the requested configuration", ErrUncertainWrite)
 		}
 		if attempt > c.options.ConflictRetries {
 			return fmt.Errorf("Caddy mutation retry limit reached after reconciliation: %w", lastErr)
@@ -68,7 +71,7 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 			verifiedWrite = true
 			continue
 		}
-		if errors.As(err, &he) && he.Status != 412 {
+		if errors.As(err, &he) && he.Status != 412 && he.Status < 500 {
 			return err
 		}
 		lastErr = err
@@ -80,6 +83,9 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			if afterWrite {
+				return fmt.Errorf("%w: %w", ErrUncertainWrite, ctx.Err())
+			}
 			return ctx.Err()
 		case <-timer.C:
 		}

@@ -3,6 +3,7 @@ package caddy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -120,5 +121,52 @@ func TestMutateLostResponseNoRetries(t *testing.T) {
 	})
 	if err != nil || writes != 1 {
 		t.Fatalf("lost response: writes %d err %v", writes, err)
+	}
+}
+func TestMutatePostCommitCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("ETag", `"e"`)
+			w.Write([]byte(`{}`))
+			return
+		}
+		cancel()
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	defer s.Close()
+	c, _ := NewClient(Options{Endpoint: s.URL, ConflictRetries: 5})
+	err := c.Mutate(ctx, Path{"config"}, func(Snapshot) (Decision, error) {
+		return Decision{Method: "POST", Path: Path{"config", "apps"}, Body: map[string]any{}}, nil
+	})
+	if !errors.Is(err, ErrUncertainWrite) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("lost uncertainty classification: %v", err)
+	}
+}
+func TestMutateGatewayAfterCommit(t *testing.T) {
+	n := 0
+	writes := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("ETag", `"e"`)
+			json.NewEncoder(w).Encode(map[string]any{"n": n})
+			return
+		}
+		n = 1
+		writes++
+		w.WriteHeader(502)
+	}))
+	defer s.Close()
+	c, _ := NewClient(Options{Endpoint: s.URL, ConflictRetries: 0})
+	err := c.Mutate(context.Background(), Path{"config"}, func(s Snapshot) (Decision, error) {
+		if s.Value.(map[string]any)["n"] == json.Number("1") {
+			return Decision{Done: true}, nil
+		}
+		return Decision{Method: "PATCH", Path: Path{"config", "n"}, Body: 1}, nil
+	})
+	if err != nil || writes != 1 {
+		t.Fatalf("gateway commit: %v writes=%d", err, writes)
 	}
 }

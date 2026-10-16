@@ -4,6 +4,18 @@ Manage a running Caddy instance through typed resources and its live JSON admini
 
 This is the first development increment. TLS serving, authentication, health checks, access logs and error pages follow the [delivery plan](docs/superpowers/plans/2026-10-16-caddy-delivery.md). New servers in this increment explicitly disable automatic HTTPS so host matchers do not unexpectedly initiate certificate issuance. Connections to the admin API support HTTP or verified HTTPS, including custom CA trust and mutual TLS.
 
+## Caddy prerequisite
+
+Caddy must have an existing configuration object. Starting `caddy run` without any configuration exposes a null document that Caddy cannot initialize through a subtree API write. Initialize Caddy externally, for example with this admin-only Caddyfile:
+
+```caddyfile
+{
+  admin 127.0.0.1:2019
+}
+```
+
+Use the existing service workflow to load that bootstrap before applying resources. The provider can then create missing application/server containers. During a rebuild, retain the configuration object and admin endpoint; remove the old application configuration under operator control. Root configuration replacement remains outside provider CRUD.
+
 ## Build and local installation
 
 Use Go 1.27.2. Run `make build` to create `bin/terraform-provider-caddy`. Until registry publication, install through a filesystem mirror with the explicit source address `local.sebclem.fr/sebclem/caddy`. That address is a local development identifier; it does not require a registry service.

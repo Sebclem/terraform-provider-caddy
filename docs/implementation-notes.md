@@ -10,3 +10,9 @@ The implementation follows the approved design with these recorded rulings:
 - Terraform/OpenTofu do not persist private-only metadata changes in a no-op plan. A computed configuration_revision fingerprint makes optional-field adoption a state-only update. Cost: an imported route with explicitly configured optional values can need one metadata-only apply before its next plan is empty. Required-only server/proxy imports already match without that step. This replaces the initial design's assumption that every matching import could immediately have an empty plan.
 
 The revision hashes only owned field names, not their values. Actual ownership is private provider metadata. It is not a raw configuration input or a user-configurable management mask.
+
+## Independent review
+
+The final review found lifecycle cases now covered by regression tests: explicitly identified parent replacement propagates to descendants; cancellation and gateway errors after a possible commit retain recovery state; missing ordering anchors report drift so constraints can be repaired; ambiguous upstream correspondence never clones one nested ID twice. An empty null Caddy document requires external bootstrap because the API rejects subtree creation in that state.
+
+Deferred minor: an endpoint ending in an empty query marker (`?`) is not rejected during provider validation and fails at the API boundary. Use the documented origin form without a query marker. This affects malformed endpoint input; normal HTTP/HTTPS origins are covered.

@@ -76,3 +76,30 @@ func TestProxySelectiveUpdate(t *testing.T) {
 		t.Fatalf("writes=%d", writes)
 	}
 }
+func TestProxyStructuralIDs(t *testing.T) {
+	ctx, c, _ := connection(t)
+	s := managed{kind: "server", id: "s", name: "s", fields: map[string]any{"listen": []any{"127.0.0.1:0"}}}
+	if e := createObject(ctx, c, s); e != nil {
+		t.Fatal(e)
+	}
+	r := managed{kind: "route", id: "r", parent: "s", fields: map[string]any{}}
+	if e := createObject(ctx, c, r); e != nil {
+		t.Fatal(e)
+	}
+	p := managed{kind: "proxy", id: "p", parent: "r", fields: map[string]any{"upstreams": []any{map[string]any{"dial": "127.0.0.1:9000"}}}}
+	if e := createObject(ctx, c, p); e != nil {
+		t.Fatal(e)
+	}
+	snap, _ := c.Get(ctx, caddy.Path{"config"})
+	if e := c.Write(ctx, "POST", caddy.Path{"id", "p", "upstreams", "0", "@id"}, "u", snap.ETag); e != nil {
+		t.Fatal(e)
+	}
+	p.fields["upstreams"] = []any{map[string]any{"dial": "127.0.0.1:9000"}, map[string]any{"dial": "127.0.0.1:9000"}}
+	if e := updateObject(ctx, c, p, Ownership{"upstreams": true}); e != nil {
+		t.Fatal(e)
+	}
+	snap, _ = c.Get(ctx, caddy.Path{"config"})
+	if _, e := caddy.Resolve(snap, "p"); e != nil {
+		t.Fatalf("structural edit created duplicate IDs: %v", e)
+	}
+}

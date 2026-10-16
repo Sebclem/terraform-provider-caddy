@@ -193,4 +193,4 @@ Identity: Tasks 2, 5–9. Transport: Task 1. Partial updates/concurrency: Tasks 
 
 Do not mark the milestone complete until all required real API and both-CLI checks pass. Any Caddy rejection of an intermediate empty structure must be solved with the smallest valid object; do not add staging/activation. Stop and report an incompatible API/state contract rather than silently dropping a requirement. No production cutover or push is part of this plan.
 
-Execution evidence and recorded implementation rulings: [implementation notes](../../implementation-notes.md). All ten tasks are implemented; final branch review remains the integration gate.
+Execution evidence and recorded implementation rulings: [implementation notes](../../implementation-notes.md). All ten tasks are implemented. Independent review findings were reproduced, fixed and verified; one malformed-endpoint validation minor is deferred. See [review evidence](../../review.md). Integration choice remains pending.

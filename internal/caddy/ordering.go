@@ -2,6 +2,8 @@ package caddy
 
 import "errors"
 
+var ErrMissingAnchor = errors.New("ordering anchor is not an existing sibling")
+
 type Position struct{ BeforeID, AfterID string }
 
 func indexes(a []Value, id string, p Position) (int, int, error) {
@@ -32,7 +34,7 @@ func indexes(a []Value, id string, p Position) (int, int, error) {
 		return 0, 0, ErrNotFound
 	}
 	if anchor != "" && j < 0 {
-		return 0, 0, errors.New("ordering anchor is not an existing sibling")
+		return 0, 0, ErrMissingAnchor
 	}
 	return i, j, nil
 }

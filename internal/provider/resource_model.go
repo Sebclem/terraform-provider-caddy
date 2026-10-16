@@ -178,6 +178,10 @@ func (r *caddyResource) live(ctx context.Context, s caddy.Snapshot, m model) (mo
 	a, _ := caddy.At(s.Value, o.ParentPath[len(s.Path):])
 	array, _ := a.([]any)
 	ok, e := caddy.OrderSatisfied(array, m.ID.ValueString(), caddy.Position{BeforeID: m.Before.ValueString(), AfterID: m.After.ValueString()})
+	if errors.Is(e, caddy.ErrMissingAnchor) {
+		ok = false
+		e = nil
+	}
 	if e != nil {
 		return m, e
 	}
