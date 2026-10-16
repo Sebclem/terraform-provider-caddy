@@ -35,7 +35,7 @@ Subsequent increments cover only repository-used behavior: static proxy options 
 
 - Servers, routes and handlers are independently managed; handler settings such as upstreams are typed nested configuration.
 - No activation or deactivation mechanism is provided. Incomplete active routes during apply are acceptable.
-- Import is supported only for existing objects with Caddy `@id`. Objects without IDs, including the metrics singleton, cannot be imported.
+- Import is supported only for existing objects with Caddy `@id`. Objects without IDs, including metrics and hostname log bindings, cannot be imported.
 - Support mutually exclusive `before_id` and `after_id` ordering constraints.
 - Generate UUID v4 identifiers when `object_id` is omitted; preserve established IDs across updates.
 - Support HTTP and HTTPS, including custom CA trust and optional mutual TLS. Unix sockets are excluded.
@@ -45,4 +45,4 @@ Subsequent increments cover only repository-used behavior: static proxy options 
 - Keep the Caddy admin listener outside provider management. Existing certificate files and their renewal/reload workflow remain operator responsibilities.
 - Support only features used by this repository; named routes and relay support can follow the active migration.
 
-The detailed design is in [Caddy provider design](design.md). It is a draft for review; implementation planning follows design approval.
+The detailed design is in [Caddy provider design](design.md). It is approved for implementation planning; the implementation plans are in `docs/superpowers/plans/`.

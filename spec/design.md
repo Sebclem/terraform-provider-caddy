@@ -1,6 +1,6 @@
 # Caddy provider design
 
-Status: Draft for review, 2026-10-16. Covers the first release and agreed later increments.
+Status: Approved for implementation planning, 2026-10-16. Covers the first release and agreed later increments.
 
 ## Purpose and scope
 
@@ -10,7 +10,7 @@ The public interface uses typed attributes and nested blocks. No raw JSON, Caddy
 
 Installation, plugins, service management, certificate file provisioning, DNS, monitoring services and other infrastructure remain outside this provider. Unix sockets are unsupported. Production migration is deferred until incremental releases cover the required configuration behavior.
 
-This design was developed from the current discussion and repository configuration, independently of the deleted specification. Detailed schemas below are proposals for review; behavioral decisions explicitly agreed in the discussion are requirements.
+This design was developed from the current discussion and repository configuration, independently of the deleted specification. The design and delivery roadmap have been approved for implementation planning. The implementation plan records framework-specific schema details.
 
 ## Delivery approach
 
@@ -55,7 +55,7 @@ For a failed or uncertain create, retain the attempted identity in recoverable s
 | `object_id`, `id` | Common identity contract. |
 | `listen` | Required nonempty ordered list of listening addresses; updated in place. |
 
-Own the server identity and listening addresses. Preserve independently managed routes and other server fields on update. Create under the HTTP server map, initializing missing containers with guarded merges. Never replace an existing server of the same name during creation.
+Own the server identity and listening addresses. Preserve independently managed routes and other server fields on update. Create under the HTTP server map, initializing missing containers with guarded merges. Never replace an existing server of the same name during creation. In the first HTTP-only increment, new servers explicitly set `automatic_https.disable=true`; otherwise host matchers can trigger Caddy automatic HTTPS even on high ports. Preserve imported automatic-HTTPS settings. The TLS increment adds typed controls for HTTPS and redirects.
 
 ### caddy_http_route
 
@@ -63,12 +63,12 @@ Own the server identity and listening addresses. Preserve independently managed 
 | --- | --- |
 | `server_id` | Required reference to the parent server ID; changing parent requires replacement. |
 | `object_id`, `id` | Common identity contract. |
-| `match` | Optional ordered list of typed matcher blocks, initially containing a nonempty `hosts` list. |
+| `match` | Optional/computed ordered list of typed matcher objects, initially containing a nonempty `hosts` list. Use a nested attribute so imported observed values can be represented. |
 | `terminal` | Optional/computed boolean; effective default false for new routes. |
 | `group` | Optional/computed string; absent by default. |
 | `before_id`, `after_id` | Optional, mutually exclusive sibling ordering constraints. |
 
-The first increment supports host matching only. Multiple match blocks represent alternatives; future matcher fields within one block will combine according to Caddy matcher semantics. An omitted match collection on a new route matches all requests. An explicitly empty collection also expresses no matcher restriction.
+The first increment supports host matching only. Multiple match objects represent alternatives; future matcher fields within one block will combine according to Caddy matcher semantics. An omitted match collection on a new route matches all requests. An explicitly empty collection also expresses no matcher restriction.
 
 Own route identity, supported matcher fields and configured flags. Preserve the handler collection during route updates. Unsupported matcher fields encountered during import are preserved internally when an owned-field update can safely leave them intact. If the provider cannot safely represent or preserve the imported object, import fails with a precise diagnostic. Do not invent a simplified typed representation or expose a raw payload.
 
@@ -103,9 +103,9 @@ resource "caddy_http_route" "app" {
   server_id = caddy_http_server.main.id
   terminal  = true
 
-  match {
+  match = [{
     hosts = ["app.example.test"]
-  }
+  }]
 }
 
 resource "caddy_handler_reverse_proxy" "app" {
@@ -156,7 +156,7 @@ After an ambiguous write response, inspect the intended identity before retrying
 
 With no constraint, append during creation and preserve position on content updates. Removing a constraint releases ordering control without moving the object. If a constraint is satisfied, do not move the object unnecessarily. Otherwise insert immediately before or after the anchor in a freshly read array, preserving the relative order of other elements. Change position in one guarded array write; never delete and reinsert through separate API calls.
 
-Keep requested ordering intent in state. Refresh checks whether the live ordering still satisfies it, and planning schedules an update when it does not. Do not infer a permanent ordering constraint merely from the current neighbor during import. Cross-resource constraints must converge; tests must cover shared anchors and distinguish satisfiable constraints from cycles.
+Keep requested ordering intent in state. A computed `order_satisfied` status reports the live constraint result; planning sets its desired value to true to schedule an update when the constraint is violated. Removing the constraint releases ordering control. This status is not a configurable management field. Do not infer a permanent ordering constraint merely from the current neighbor during import. Cross-resource constraints must converge; tests must cover shared anchors and distinguish satisfiable constraints from cycles.
 
 ## Import
 
@@ -203,7 +203,7 @@ Each nested option is updated through the smallest safe API scope within the rev
 
 ### Routing and access control
 
-Extend route matcher blocks with typed path, method and client-IP conditions. Conditions within a block are ANDed; matcher blocks are ORed. A typed `not` block represents Caddy's negated matcher sets, including the current whitelist and WebDAV rules. Use the actual `client_ip` matcher and a typed trusted-proxies setting on `caddy_http_server`, so forwarded addresses are trusted only from configured proxy ranges. Validate direct and proxied IPv4/IPv6 traffic, including spoofed headers from untrusted peers.
+Extend route matcher objects with typed path, method and client-IP conditions. Conditions within an object are ANDed; matcher objects are ORed. A typed `not` block represents Caddy's negated matcher sets, including the current whitelist and WebDAV rules. Use the actual `client_ip` matcher and a typed trusted-proxies setting on `caddy_http_server`, so forwarded addresses are trusted only from configured proxy ranges. Validate direct and proxied IPv4/IPv6 traffic, including spoofed headers from untrusted peers.
 
 Introduce `caddy_handler_subroute`, with independently managed child `caddy_http_route` resources. A child route names its parent subroute instead of a server. Child handlers remain independent. Route ordering and identity rules apply within each child collection. This supports the Jellyfin exact `/metrics` path and fallback behavior without embedding opaque route arrays.
 
@@ -217,7 +217,7 @@ Add typed server TLS/automatic-HTTPS settings needed to serve those certificates
 
 ### Logs and error pages
 
-Introduce independent `caddy_log` and `caddy_log_binding` resources. A log owns a named destination and typed file-writer options, including path, mode, rotation size and local-time option. A binding owns one hostname-to-log association within a server and updates the corresponding map entry without replacing other host mappings. The provider must preserve the effective default-log filtering behavior of the current Caddyfile; any shared filter has one explicit owner.
+Introduce independent `caddy_log` and `caddy_log_binding` resources. A log owns a named destination and typed file-writer options, including path, mode, rotation size and local-time option. A binding owns one hostname-to-log association within a server and updates the corresponding map entry without replacing other host mappings. Its underlying value has no Caddy `@id`, so it uses a documented internal composite state identity and does not support import. The provider must preserve the effective default-log filtering behavior of the current Caddyfile; any shared filter has one explicit owner.
 
 Introduce a high-level `caddy_error_pages` resource attached to a subroute. It owns the error route and its ordered root, rewrite and file-server handlers, with typed page root and page URI. It generates stable internal IDs where supported, but its internal handlers are not separate public resources or individually importable. An error-page setting change updates this resource in place. Keep its request status behavior and missing-file behavior aligned with the adapted configuration. Error-page files themselves remain external.
 
