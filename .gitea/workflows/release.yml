@@ -1,0 +1,61 @@
+name: Release provider
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: provider-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Import release signing key
+        uses: crazy-max/ghaction-import-gpg@v6
+        id: import-gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.18.3
+          args: release --clean
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import-gpg.outputs.fingerprint }}
+
+      - name: Publish to Terralist
+        env:
+          TERRALIST_API_KEY: ${{ secrets.TERRALIST_API_KEY }}
+          TERRALIST_URL: https://terralist.sebclem.fr
+          VERSION: ${{ github.ref_name }}
+        run: |
+          python3 scripts/publish-terralist.py \
+            --version "${VERSION}" \
+            --terralist-url "${TERRALIST_URL}" \
+            --api-key "${TERRALIST_API_KEY}" \
+            --dist-dir "dist" \
+            --host "git.sebclem.fr" \
+            --owner "sebclem" \
+            --repo "terraform-provider-caddy"
