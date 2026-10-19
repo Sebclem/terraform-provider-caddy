@@ -9,7 +9,7 @@ A separate reviewer inspected 0f17c37..a01ddcb read-only against the approved sp
 | Missing ordering anchor prevented refresh/repair | TestAccMissingAnchorRecovery failed before the fix and passed afterward. Missing anchors report unsatisfied order during Read; requested nonexistent anchors still fail during mutation. |
 | Structural upstream edits could clone one nested ID twice | TestProxyStructuralIDs reproduced Caddy rejecting the duplicate-ID array; the corrected correspondence logic passes and preserves unique identities. |
 
-The null-root bootstrap diagnostic was promoted from minor to an onboarding requirement. On isolated Caddy 2.11.7, default startup exposes a null configuration and guarded POST /config/apps returns 500. Root replacement remains forbidden. TestBootstrapDiagnostic failed on the unhelpful message and passed after adding an actionable external-bootstrap prerequisite. An admin-only Caddyfile was adapted with the pinned binary to confirm an object configuration.
+On isolated Caddy 2.11.7, default startup exposes a null configuration. When Caddy exposes a null configuration document, the provider automatically initializes an empty root configuration object (`{}`) via `POST /config/` before applying mutations, enabling subsequent resource creation without requiring an external bootstrap Caddyfile. Root replacement remains forbidden.
 
 Final verification ran on the fixed implementation:
 
@@ -27,6 +27,6 @@ A trailing empty query marker in an endpoint URL (`http://host?`) bypasses the e
 
 ## Scope rulings
 
-Later features are intentionally outside this release, as required by incremental delivery; the active repository is not ready for complete migration yet. Compatibility claims cover only the tested version matrix. Imports of unsupported matcher shapes fail explicitly until the matcher increment is implemented. Null-root bootstrap remains external to preserve the approved root-mutation prohibition.
+Later features are intentionally outside this release, as required by incremental delivery; the active repository is not ready for complete migration yet. Compatibility claims cover only the tested version matrix. Imports of unsupported matcher shapes fail explicitly until the matcher increment is implemented. Null-root bootstrap is handled by initializing an empty root object (`{}`) when the configuration document is null.
 
 All implementation rulings and their trade-offs are recorded in [implementation notes](implementation-notes.md).

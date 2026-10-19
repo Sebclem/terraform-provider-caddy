@@ -6,15 +6,7 @@ The active-site feature set includes static proxy options and health checks, nes
 
 ## Caddy prerequisite
 
-Caddy must have an existing configuration object. Starting `caddy run` without any configuration exposes a null document that Caddy cannot initialize through a subtree API write. Initialize Caddy externally, for example with this admin-only Caddyfile:
-
-```caddyfile
-{
-  admin 127.0.0.1:2019
-}
-```
-
-Use the existing service workflow to load that bootstrap before applying resources. The provider can then create missing application/server containers. During a rebuild, retain the configuration object and admin endpoint; remove the old application configuration under operator control. Root configuration replacement remains outside provider CRUD.
+Caddy may start with a pre-existing configuration object or with an empty (null) configuration document (for example, starting `caddy run` with the administration endpoint configured via environment variables such as `CADDY_ADMIN`). When Caddy exposes a null configuration document, the provider automatically initializes an empty root object (`{}`) via `POST /config/` before applying mutations, enabling subsequent resource creation without requiring an external bootstrap Caddyfile. Root configuration replacement remains outside provider CRUD.
 
 ## Build and local installation
 

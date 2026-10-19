@@ -33,7 +33,7 @@ Implement in Go using Terraform Plugin Framework. Separate HTTP transport, mutat
 | `request_timeout` | Positive duration, default `30s`. |
 | `conflict_retries` | Nonnegative retry limit, default 5. |
 
-Verify HTTPS certificates and server names. Reject mismatched certificate/key settings. Resource operations have a bounded two-minute deadline, including retries, and honor cancellation. Provider aliases may address different instances. The externally configured Caddy instance must already expose an object configuration document, for example from an admin-only Caddyfile; the API cannot bootstrap subtrees from a null root without the prohibited root replacement. Do not log certificate keys or full configuration bodies. Planning, refresh and import perform no mutations.
+Verify HTTPS certificates and server names. Reject mismatched certificate/key settings. Resource operations have a bounded two-minute deadline, including retries, and honor cancellation. Provider aliases may address different instances. When Caddy starts with a null configuration document (with admin endpoint managed via environment variables such as `CADDY_ADMIN`), the provider automatically initializes an empty root configuration object (`{}`) via `POST /config/` before applying mutations, enabling subsequent resource creation without requiring an external bootstrap Caddyfile. Do not log certificate keys or full configuration bodies. Planning, refresh and import perform no mutations.
 
 ## Identity
 
