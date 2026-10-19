@@ -170,3 +170,47 @@ func TestMutateGatewayAfterCommit(t *testing.T) {
 		t.Fatalf("gateway commit: %v writes=%d", err, writes)
 	}
 }
+
+func TestMutateNullRootBootstrap(t *testing.T) {
+	var doc any = nil
+	emptyRootWritten := false
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/config/" {
+			if doc == nil {
+				w.Header().Set("ETag", `"null-etag"`)
+				w.Write([]byte(`null`))
+				return
+			}
+			w.Header().Set("ETag", `"obj-etag"`)
+			w.Write([]byte(`{}`))
+			return
+		}
+		if r.Method == "POST" && r.URL.Path == "/config/" {
+			emptyRootWritten = true
+			doc = map[string]any{}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer s.Close()
+
+	c, _ := NewClient(Options{Endpoint: s.URL})
+	sawEmptyObject := false
+	err := c.Mutate(context.Background(), Path{"config"}, func(snap Snapshot) (Decision, error) {
+		if snap.Value != nil {
+			if _, ok := snap.Value.(map[string]any); ok {
+				sawEmptyObject = true
+				return Decision{Done: true}, nil
+			}
+		}
+		return Decision{}, errors.New("expected initialized object")
+	})
+	if err != nil {
+		t.Fatalf("unexpected mutate error: %v", err)
+	}
+	if !emptyRootWritten || !sawEmptyObject {
+		t.Fatalf("expected empty root write and empty object snapshot: written=%v sawObj=%v", emptyRootWritten, sawEmptyObject)
+	}
+}
+

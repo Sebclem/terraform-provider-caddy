@@ -93,9 +93,6 @@ func createObject(ctx context.Context, c *caddy.Client, m managed) error {
 	}
 	want := objectBody(m)
 	return c.Mutate(ctx, caddy.Path{"config"}, func(s caddy.Snapshot) (caddy.Decision, error) {
-		if s.Value == nil {
-			return caddy.Decision{}, errors.New("Caddy has no configuration document; initialize an external bootstrap configuration object (for example, an admin-only Caddyfile) before creating resources; root replacement is intentionally unsupported")
-		}
 		found, e := caddy.Resolve(s, m.id)
 		if e == nil {
 			if s.AfterWrite {

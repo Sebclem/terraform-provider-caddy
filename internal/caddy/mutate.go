@@ -44,6 +44,14 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 			}
 			return err
 		}
+		if snap.Value == nil && (len(scope) == 0 || (len(scope) == 1 && scope[0] == "config")) {
+			err = c.Write(ctx, "POST", scope, map[string]any{}, snap.ETag)
+			if err != nil {
+				return err
+			}
+			attempt--
+			continue
+		}
 		snap.AfterWrite = afterWrite
 		decision, err := f(snap)
 		if err != nil {

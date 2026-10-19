@@ -151,8 +151,8 @@ func (c *Client) Write(ctx context.Context, method string, p Path, v Value, etag
 	if method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" {
 		return errors.New("unsupported mutation method")
 	}
-	if len(p) == 0 || (p[0] != "config" && p[0] != "id") || (p[0] == "config" && len(p) == 1) {
-		return errors.New("refusing root or non-configuration mutation")
+	if len(p) == 0 || (p[0] != "config" && p[0] != "id") {
+		return errors.New("refusing non-configuration mutation")
 	}
 	resp, err := c.request(ctx, method, p, v, etag)
 	if err != nil {
