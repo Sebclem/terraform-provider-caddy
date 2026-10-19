@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.repository == 'sebclem/terraform-provider-caddy'
     runs-on: ubuntu-latest
     steps:
       - name: Check out full history
@@ -54,7 +55,6 @@ jobs:
           python3 scripts/publish-terralist.py \
             --version "${VERSION}" \
             --terralist-url "${TERRALIST_URL}" \
-            --api-key "${TERRALIST_API_KEY}" \
             --dist-dir "dist" \
             --host "git.sebclem.fr" \
             --owner "sebclem" \

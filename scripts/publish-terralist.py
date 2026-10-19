@@ -100,9 +100,11 @@ def publish_to_terralist(
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.getcode()
             body = resp.read().decode("utf-8")
+            if status not in (200, 201):
+                raise RuntimeError(f"Terralist API responded with unexpected HTTP {status}: {body}")
             print(f"Terralist responded with HTTP {status}: {body}")
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else ""

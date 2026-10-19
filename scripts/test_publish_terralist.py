@@ -64,5 +64,18 @@ class TestPublishTerralist(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             publish_to_terralist("https://terralist.sebclem.fr", "secret-key", "sebclem", "caddy", "0.2.0", payload)
 
+    @patch("urllib.request.urlopen")
+    def test_publish_unexpected_status_code(self, mock_urlopen):
+        from publish_terralist import publish_to_terralist
+        mock_response = MagicMock()
+        mock_response.getcode.return_value = 202
+        mock_response.read.return_value = b'{"status": "accepted"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        payload = {"protocols": ["6.0"]}
+        with self.assertRaises(RuntimeError) as ctx:
+            publish_to_terralist("https://terralist.sebclem.fr", "secret-key", "sebclem", "caddy", "0.2.0", payload)
+        self.assertIn("unexpected HTTP 202", str(ctx.exception))
+
 if __name__ == "__main__":
     unittest.main()
