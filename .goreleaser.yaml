@@ -11,7 +11,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }} -X main.address=registry.opentofu.org/sebclem/caddy
+      - -s -w -X main.version={{ .Version }} -X main.address=terralist.sebclem.fr/sebclem/caddy
     goos:
       - darwin
       - freebsd
@@ -59,7 +59,8 @@ signs:
       - '${artifact}'
 
 release:
-  github:
+  gitea:
+    host: git.sebclem.fr
     owner: sebclem
     name: terraform-provider-caddy
   draft: false
