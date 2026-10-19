@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -213,4 +214,99 @@ func TestMutateNullRootBootstrap(t *testing.T) {
 		t.Fatalf("expected empty root write and empty object snapshot: written=%v sawObj=%v", emptyRootWritten, sawEmptyObject)
 	}
 }
+
+func TestMutateNullNonRoot(t *testing.T) {
+	writes := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("ETag", `"null-etag"`)
+			w.Write([]byte(`null`))
+			return
+		}
+		writes++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer s.Close()
+
+	c, _ := NewClient(Options{Endpoint: s.URL})
+	sawNil := false
+	err := c.Mutate(context.Background(), Path{"id", "foo"}, func(snap Snapshot) (Decision, error) {
+		if snap.Value == nil {
+			sawNil = true
+			return Decision{Done: true}, nil
+		}
+		return Decision{}, errors.New("expected nil value")
+	})
+	if err != nil || !sawNil || writes != 0 {
+		t.Fatalf("expected non-root null to pass to callback without writing: err=%v sawNil=%v writes=%d", err, sawNil, writes)
+	}
+}
+
+func TestMutateNullRootConflictRetry(t *testing.T) {
+	var doc any = nil
+	postAttempts := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/config/" {
+			if doc == nil {
+				w.Header().Set("ETag", `"etag-0"`)
+				w.Write([]byte(`null`))
+				return
+			}
+			w.Header().Set("ETag", `"etag-1"`)
+			w.Write([]byte(`{}`))
+			return
+		}
+		if r.Method == "POST" && r.URL.Path == "/config/" {
+			postAttempts++
+			if postAttempts == 1 {
+				// Simulate another process won the race and updated the root
+				doc = map[string]any{}
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
+		}
+		http.Error(w, "unexpected", http.StatusBadRequest)
+	}))
+	defer s.Close()
+
+	c, _ := NewClient(Options{Endpoint: s.URL, ConflictRetries: 3})
+	reconciled := false
+	err := c.Mutate(context.Background(), Path{"config"}, func(snap Snapshot) (Decision, error) {
+		if snap.Value != nil {
+			reconciled = true
+			return Decision{Done: true}, nil
+		}
+		return Decision{}, errors.New("expected non-nil snapshot")
+	})
+	if err != nil || !reconciled || postAttempts != 1 {
+		t.Fatalf("expected conflict retry to recover and reconcile: err=%v reconciled=%v postAttempts=%d", err, reconciled, postAttempts)
+	}
+}
+
+func TestMutateNullRootPersistentNull(t *testing.T) {
+	writes := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/config/" {
+			w.Header().Set("ETag", `"null-etag"`)
+			w.Write([]byte(`null`))
+			return
+		}
+		if r.Method == "POST" && r.URL.Path == "/config/" {
+			writes++
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Error(w, "unexpected", http.StatusBadRequest)
+	}))
+	defer s.Close()
+
+	c, _ := NewClient(Options{Endpoint: s.URL})
+	err := c.Mutate(context.Background(), Path{"config"}, func(snap Snapshot) (Decision, error) {
+		return Decision{Done: true}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "remains null") {
+		t.Fatalf("expected error on persistent null root: %v (writes=%d)", err, writes)
+	}
+}
+
 

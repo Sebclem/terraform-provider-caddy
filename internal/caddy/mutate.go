@@ -35,6 +35,7 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 	}
 	afterWrite := false
 	verifiedWrite := false
+	bootstrapped := false
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		snap, err := c.Get(ctx, scope)
@@ -44,11 +45,29 @@ func (c *Client) Mutate(ctx context.Context, scope Path, f Reconcile) error {
 			}
 			return err
 		}
-		if snap.Value == nil && (len(scope) == 0 || (len(scope) == 1 && scope[0] == "config")) {
+		if snap.Value == nil && len(scope) == 1 && scope[0] == "config" {
+			if bootstrapped {
+				return errors.New("Caddy configuration remains null after initialization")
+			}
 			err = c.Write(ctx, "POST", scope, map[string]any{}, snap.ETag)
 			if err != nil {
+				if IsStatus(err, 412) {
+					lastErr = err
+					if attempt >= c.options.ConflictRetries {
+						return fmt.Errorf("Caddy mutation retry limit reached: %w", err)
+					}
+					timer := time.NewTimer(time.Duration(5+rand.IntN(15)) * time.Millisecond)
+					select {
+					case <-ctx.Done():
+						timer.Stop()
+						return ctx.Err()
+					case <-timer.C:
+					}
+					continue
+				}
 				return err
 			}
+			bootstrapped = true
 			attempt--
 			continue
 		}

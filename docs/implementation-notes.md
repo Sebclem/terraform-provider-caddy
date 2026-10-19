@@ -13,7 +13,7 @@ The revision hashes only owned field names, not their values. Actual ownership i
 
 ## Independent review
 
-The final review found lifecycle cases now covered by regression tests: explicitly identified parent replacement propagates to descendants; cancellation and gateway errors after a possible commit retain recovery state; missing ordering anchors report drift so constraints can be repaired; ambiguous upstream correspondence never clones one nested ID twice. An empty null Caddy document requires external bootstrap because the API rejects subtree creation in that state.
+The final review found lifecycle cases now covered by regression tests: explicitly identified parent replacement propagates to descendants; cancellation and gateway errors after a possible commit retain recovery state; missing ordering anchors report drift so constraints can be repaired; ambiguous upstream correspondence never clones one nested ID twice. An empty null Caddy document is automatically initialized with an empty root object (`{}`) via `POST /config/`.
 
 Deferred minor: an endpoint ending in an empty query marker (`?`) is not rejected during provider validation and fails at the API boundary. Use the documented origin form without a query marker. This affects malformed endpoint input; normal HTTP/HTTPS origins are covered.
 
