@@ -1,19 +1,60 @@
 # Provider releases
 
-The Gitea repository remains the source repository. The release workflow is intended to run from the future public GitHub mirror, `sebclem/terraform-provider-caddy`. It builds platform archives, the OpenTofu protocol manifest, SHA256 checksums and a detached GPG signature, then publishes those files as a GitHub Release. The workflow deliberately skips runs from any other GitHub repository.
+Provider releases for `terraform-provider-caddy` are built, signed, and published natively via Gitea Actions on `git.sebclem.fr` and registered with the Terralist registry at `terralist.sebclem.fr`.
+
+Whenever a semantic version tag (e.g. `v0.2.0`) is pushed to the repository, Gitea Actions executes `.gitea/workflows/release.yml`:
+1. Checks out the repository and imports the release GPG signing key.
+2. Runs GoReleaser to cross-compile platform binaries stamped with `main.address=terralist.sebclem.fr/sebclem/caddy`.
+3. Generates the `SHA256SUMS` file and detached GPG signature (`.sig`).
+4. Creates a public Gitea Release on `git.sebclem.fr/sebclem/terraform-provider-caddy` with all package assets.
+5. Dispatches an upload registration request to `https://terralist.sebclem.fr/v1/api/providers/sebclem/caddy/:version/upload` via `scripts/publish-terralist.py`. Terralist downloads the release assets directly from the public Gitea release and verifies the signature against the `sebclem` authority public key.
 
 ## One-time setup
 
-1. Create and publish the GitHub mirror `sebclem/terraform-provider-caddy`, including `.github/workflows/release.yml`, `.goreleaser.yaml` and `terraform-registry-manifest.json`. Ensure version tags are mirrored to GitHub; the Gitea workflow runner does not execute GitHub Actions.
-2. Generate a long-lived GPG signing key and submit its public key to the OpenTofu Registry using the provider registry's GPG-key submission process. The registry requires the signing key to be registered before it will accept signed versions. Keep the private key and passphrase secure.
-3. Add GitHub Actions repository secrets `GPG_PRIVATE_KEY` (ASCII-armored private key) and `GPG_PASSPHRASE` (its passphrase). The built-in `GITHUB_TOKEN` needs repository contents write permission, which the workflow grants for release uploads.
-4. Submit the provider to the OpenTofu Registry and verify that the provider's public GPG key and GitHub release repository are associated with namespace `sebclem` and provider type `caddy`.
-5. Push a new semantic version tag such as `v0.2.0` to the GitHub mirror. The action builds and publishes a signed GitHub release. Once the provider is registered, the OpenTofu Registry ingests releases from its GitHub release webhook. Check the registry listing and run `tofu init` with `source = "sebclem/caddy"` after the version appears.
+1. **Terralist Authority & Signing Key:**
+   - Ensure an authority named `sebclem` exists in your Terralist instance (`terralist.sebclem.fr`).
+   - Configure your GPG public key in the authority settings so Terralist can verify uploaded release signatures.
+2. **Terralist API Key:**
+   - In Terralist Settings (`API Keys`), create an API key with write permissions for the `sebclem` authority.
+3. **Gitea Repository Secrets:**
+   Configure the following secrets under **Repository Settings > Actions > Secrets** on `git.sebclem.fr`:
+   - `GPG_PRIVATE_KEY`: ASCII-armored GPG private key matching the authority public key.
+   - `GPG_PASSPHRASE`: Passphrase for the GPG private key.
+   - `TERRALIST_API_KEY`: The Terralist API key token.
 
-Never replace the assets of an already published version. Publish fixes under a new version tag.
+## Publishing a release
 
-## Repository naming
+1. Ensure all tests and checks pass:
+   ```bash
+   make check
+   ```
+2. Create and push a semantic version tag:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+3. Monitor the Gitea Actions workflow under **Actions** on `git.sebclem.fr/sebclem/terraform-provider-caddy`.
+4. Verify the published assets on Gitea Releases (`https://git.sebclem.fr/sebclem/terraform-provider-caddy/releases/tag/v0.2.0`).
+5. Verify the provider version appears in the Terralist registry (`https://terralist.sebclem.fr`).
 
-The GitHub mirror name `terraform-provider-caddy` follows the OpenTofu Registry submission convention `NAMESPACE/terraform-provider-NAME`. The release workflow targets `sebclem/terraform-provider-caddy`, and its archives use the provider's required `terraform-provider-caddy` filenames. See the [registry submission procedure](https://github.com/opentofu/registry/blob/main/PROCEDURES.md#provider-submissions).
+> [!WARNING]
+> Never replace the assets of an already published release. Publish fixes under a new incremented semantic version tag.
 
-After publication, use the registry source address `registry.opentofu.org/sebclem/caddy` (or the shorthand `sebclem/caddy`) with the release version constraint. The release workflow and GoReleaser do not create the OpenTofu Registry entry or submit the GPG key. Registry ingestion is available after those one-time steps are complete. See the [OpenTofu provider signing requirements](https://opentofu.org/docs/cli/plugins/signing/) and [provider registry protocol](https://opentofu.org/docs/internals/provider-registry-protocol/).
+## Consuming the provider
+
+To use the published provider in Terraform or OpenTofu configurations, point the provider source to the Terralist registry:
+
+```hcl
+terraform {
+  required_providers {
+    caddy = {
+      source  = "terralist.sebclem.fr/sebclem/caddy"
+      version = "~> 0.2.0"
+    }
+  }
+}
+
+provider "caddy" {
+  # ... configuration ...
+}
+```

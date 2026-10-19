@@ -10,7 +10,7 @@ Caddy may start with a pre-existing configuration object or with an empty (null)
 
 ## Build and local installation
 
-Use Go 1.27.2. Run `make build` to create `bin/terraform-provider-caddy`. Until registry publication, install through a filesystem mirror with the explicit source address `local.sebclem.fr/sebclem/caddy`. That address is a local development identifier; it does not require a registry service.
+Use Go 1.27.2. Run `make build` to create `bin/terraform-provider-caddy`. Published releases are hosted on Terralist at `terralist.sebclem.fr/sebclem/caddy`. For local development before publication, install through a filesystem mirror with the explicit source address `terralist.sebclem.fr/sebclem/caddy` (or local development address `local.sebclem.fr/sebclem/caddy`).
 
 For Linux amd64, from the repository root:
 
